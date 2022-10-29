@@ -229,7 +229,7 @@ fn pbr(
         output_color.a);
 
     // fog
-    if (fog.mode != FOG_MODE_OFF) {
+    if (fog.mode != FOG_MODE_OFF && (in.material.flags & STANDARD_MATERIAL_FLAGS_NO_FOG_BIT) == 0u) {
         // `length()` is used here instead of just `view_z` since that produces more
         // high quality results, especially for denser/smaller fogs. we get a "curved"
         // fog shape that remains consistent with camera rotation, instead of a "linear"
