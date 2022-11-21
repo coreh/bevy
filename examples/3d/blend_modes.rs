@@ -10,7 +10,15 @@
 //! | `Spacebar`         | Toggle Unlit                        |
 //! | `C`                | Randomize Colors                    |
 
-use bevy::prelude::*;
+use bevy::{
+    pbr::{MaterialPipeline, MaterialPipelineKey},
+    prelude::*,
+    reflect::TypeUuid,
+    render::render_resource::{AsBindGroup, BlendComponent, BlendFactor, BlendState, ShaderRef},
+    render::render_resource::{
+        BlendOperation, RenderPipelineDescriptor, SpecializedMeshPipelineError,
+    },
+};
 use rand::random;
 
 fn main() {
@@ -18,6 +26,7 @@ fn main() {
 
     app.add_plugins(DefaultPlugins)
         .add_startup_system(setup)
+        .add_plugin(MaterialPlugin::<InvertMaterial>::default())
         .add_system(example_control_system);
 
     // Unfortunately, MSAA and HDR are not supported simultaneously under WebGL.
@@ -34,6 +43,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut invert_material: ResMut<Assets<InvertMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
     let base_color = Color::rgba(0.9, 0.2, 0.3, 1.0);
@@ -129,13 +139,29 @@ fn setup(
     let multiply = commands
         .spawn((
             PbrBundle {
-                mesh: icosphere_mesh,
+                mesh: icosphere_mesh.clone(),
                 material: materials.add(StandardMaterial {
                     base_color,
                     alpha_mode: AlphaMode::Multiply,
                     ..default()
                 }),
                 transform: Transform::from_xyz(4.0, 0.0, 0.0),
+                ..default()
+            },
+            ExampleControls {
+                unlit: true,
+                color: true,
+            },
+        ))
+        .id();
+
+    // Invert
+    let invert = commands
+        .spawn((
+            MaterialMeshBundle::<InvertMaterial> {
+                mesh: icosphere_mesh,
+                material: invert_material.add(InvertMaterial {}),
+                transform: Transform::from_xyz(6.0, 0.0, 0.0),
                 ..default()
             },
             ExampleControls {
@@ -173,6 +199,10 @@ fn setup(
 
     // Light
     commands.spawn(PointLightBundle {
+        point_light: PointLight {
+            intensity: 30000.0,
+            ..default()
+        },
         transform: Transform::from_xyz(4.0, 8.0, 4.0),
         ..default()
     });
@@ -264,11 +294,19 @@ fn setup(
     ));
 
     commands.spawn((
-        TextBundle::from_section("┌─ Multiply", label_text_style).with_style(Style {
+        TextBundle::from_section("┌─ Multiply", label_text_style.clone()).with_style(Style {
             position_type: PositionType::Absolute,
             ..default()
         }),
         ExampleLabel { entity: multiply },
+    ));
+
+    commands.spawn((
+        TextBundle::from_section("┌─ Invert", label_text_style).with_style(Style {
+            position_type: PositionType::Absolute,
+            ..default()
+        }),
+        ExampleLabel { entity: invert },
     ));
 }
 
@@ -375,4 +413,39 @@ fn example_control_system(
         if camera.hdr { "ON " } else { "OFF" },
         state.alpha
     );
+}
+
+#[derive(AsBindGroup, TypeUuid, Debug, Clone)]
+#[uuid = "fbe2f06f-94c1-4801-b2f9-3f13c98d5a88"]
+struct InvertMaterial {}
+
+impl Material for InvertMaterial {
+    fn specialize(
+        _pipeline: &MaterialPipeline<Self>,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &bevy::render::mesh::MeshVertexBufferLayout,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        descriptor.fragment.as_mut().unwrap().targets[0]
+            .as_mut()
+            .unwrap()
+            .blend = Some(BlendState {
+            color: BlendComponent {
+                src_factor: BlendFactor::OneMinusDst,
+                dst_factor: BlendFactor::Zero,
+                operation: BlendOperation::Add,
+            },
+            alpha: BlendComponent::OVER,
+        });
+
+        Ok(())
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/white.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Blend
+    }
 }
