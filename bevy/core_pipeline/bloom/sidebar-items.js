@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["BloomNode",""],["BloomPlugin",""],["BloomSettings","Applies a bloom effect to a HDR-enabled 2d or 3d camera."]]};
