@@ -36,6 +36,7 @@ use bevy::{
 #[cfg(not(all(feature = "webgl2", target_arch = "wasm32")))]
 use bevy::core_pipeline::experimental::taa::{TemporalAntiAliasBundle, TemporalAntiAliasPlugin};
 
+use bevy_internal::render::mesh::MeshVertexAttributeId;
 use rand::random;
 
 fn main() {
@@ -49,7 +50,7 @@ fn main() {
             ..default()
         })
         .add_systems(Startup, setup)
-        .add_systems(Update, (example_control_system, flicker_system));
+        .add_systems(Update, (example_control_system));
 
     // *Note:* TAA is not _required_ for specular transmission, but
     // it _greatly enhances_ the look of the resulting blur effects.
@@ -78,7 +79,14 @@ fn setup(
 
     let cube_mesh = meshes.add(Mesh::from(shape::Cube { size: 0.7 }));
 
-    let plane_mesh = meshes.add(shape::Plane::from_size(2.0).into());
+    let mut plane_mesh: Mesh = shape::Plane::from_size(2.0).into();
+    plane_mesh.generate_tangents();
+    plane_mesh.remove_attribute(Mesh::ATTRIBUTE_UV_0);
+    plane_mesh.insert_attribute(
+        Mesh::ATTRIBUTE_UV_0,
+        vec![[0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]],
+    );
+    let plane_mesh = meshes.add(plane_mesh);
 
     let cylinder_mesh = meshes.add(
         Mesh::try_from(shape::Cylinder {
@@ -91,178 +99,178 @@ fn setup(
     );
 
     // Cube #1
-    commands.spawn((
-        PbrBundle {
-            mesh: cube_mesh.clone(),
-            material: materials.add(StandardMaterial { ..default() }),
-            transform: Transform::from_xyz(0.25, 0.5, -2.0).with_rotation(Quat::from_euler(
-                EulerRot::XYZ,
-                1.4,
-                3.7,
-                21.3,
-            )),
-            ..default()
-        },
-        ExampleControls {
-            color: true,
-            specular_transmission: false,
-            diffuse_transmission: false,
-        },
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: cube_mesh.clone(),
+    //         material: materials.add(StandardMaterial { ..default() }),
+    //         transform: Transform::from_xyz(0.25, 0.5, -2.0).with_rotation(Quat::from_euler(
+    //             EulerRot::XYZ,
+    //             1.4,
+    //             3.7,
+    //             21.3,
+    //         )),
+    //         ..default()
+    //     },
+    //     ExampleControls {
+    //         color: true,
+    //         specular_transmission: false,
+    //         diffuse_transmission: false,
+    //     },
+    // ));
 
     // Cube #2
-    commands.spawn((
-        PbrBundle {
-            mesh: cube_mesh,
-            material: materials.add(StandardMaterial { ..default() }),
-            transform: Transform::from_xyz(-0.75, 0.7, -2.0).with_rotation(Quat::from_euler(
-                EulerRot::XYZ,
-                0.4,
-                2.3,
-                4.7,
-            )),
-            ..default()
-        },
-        ExampleControls {
-            color: true,
-            specular_transmission: false,
-            diffuse_transmission: false,
-        },
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: cube_mesh,
+    //         material: materials.add(StandardMaterial { ..default() }),
+    //         transform: Transform::from_xyz(-0.75, 0.7, -2.0).with_rotation(Quat::from_euler(
+    //             EulerRot::XYZ,
+    //             0.4,
+    //             2.3,
+    //             4.7,
+    //         )),
+    //         ..default()
+    //     },
+    //     ExampleControls {
+    //         color: true,
+    //         specular_transmission: false,
+    //         diffuse_transmission: false,
+    //     },
+    // ));
 
     // Candle
-    commands.spawn((
-        PbrBundle {
-            mesh: cylinder_mesh,
-            material: materials.add(StandardMaterial {
-                base_color: Color::rgba(0.9, 0.2, 0.3, 1.0),
-                diffuse_transmission: 0.7,
-                perceptual_roughness: 0.32,
-                thickness: 0.2,
-                ..default()
-            }),
-            transform: Transform::from_xyz(-1.0, 0.0, 0.0),
-            ..default()
-        },
-        NotTransmittedShadowReceiver,
-        ExampleControls {
-            color: true,
-            specular_transmission: false,
-            diffuse_transmission: true,
-        },
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: cylinder_mesh,
+    //         material: materials.add(StandardMaterial {
+    //             base_color: Color::rgba(0.9, 0.2, 0.3, 1.0),
+    //             diffuse_transmission: 0.7,
+    //             perceptual_roughness: 0.32,
+    //             thickness: 0.2,
+    //             ..default()
+    //         }),
+    //         transform: Transform::from_xyz(-1.0, 0.0, 0.0),
+    //         ..default()
+    //     },
+    //     NotTransmittedShadowReceiver,
+    //     ExampleControls {
+    //         color: true,
+    //         specular_transmission: false,
+    //         diffuse_transmission: true,
+    //     },
+    // ));
 
     // Candle Flame
-    commands.spawn((
-        PbrBundle {
-            mesh: icosphere_mesh.clone(),
-            material: materials.add(StandardMaterial {
-                emissive: Color::ANTIQUE_WHITE * 20.0 + Color::ORANGE_RED * 4.0,
-                diffuse_transmission: 1.0,
-                ..default()
-            }),
-            transform: Transform::from_xyz(-1.0, 1.15, 0.0).with_scale(Vec3::new(0.1, 0.2, 0.1)),
-            ..default()
-        },
-        Flicker,
-        NotShadowCaster,
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: icosphere_mesh.clone(),
+    //         material: materials.add(StandardMaterial {
+    //             emissive: Color::ANTIQUE_WHITE * 20.0 + Color::ORANGE_RED * 4.0,
+    //             diffuse_transmission: 1.0,
+    //             ..default()
+    //         }),
+    //         transform: Transform::from_xyz(-1.0, 1.15, 0.0).with_scale(Vec3::new(0.1, 0.2, 0.1)),
+    //         ..default()
+    //     },
+    //     Flicker,
+    //     NotShadowCaster,
+    // ));
 
     // Glass Sphere
-    commands.spawn((
-        PbrBundle {
-            mesh: icosphere_mesh.clone(),
-            material: materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                specular_transmission: 0.9,
-                diffuse_transmission: 1.0,
-                thickness: 1.8,
-                ior: 1.5,
-                perceptual_roughness: 0.12,
-                ..default()
-            }),
-            transform: Transform::from_xyz(1.0, 0.0, 0.0),
-            ..default()
-        },
-        NotTransmittedShadowReceiver,
-        ExampleControls {
-            color: true,
-            specular_transmission: true,
-            diffuse_transmission: false,
-        },
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: icosphere_mesh.clone(),
+    //         material: materials.add(StandardMaterial {
+    //             base_color: Color::WHITE,
+    //             specular_transmission: 0.9,
+    //             diffuse_transmission: 1.0,
+    //             thickness: 1.8,
+    //             ior: 1.5,
+    //             perceptual_roughness: 0.12,
+    //             ..default()
+    //         }),
+    //         transform: Transform::from_xyz(1.0, 0.0, 0.0),
+    //         ..default()
+    //     },
+    //     NotTransmittedShadowReceiver,
+    //     ExampleControls {
+    //         color: true,
+    //         specular_transmission: true,
+    //         diffuse_transmission: false,
+    //     },
+    // ));
 
     // R Sphere
-    commands.spawn((
-        PbrBundle {
-            mesh: icosphere_mesh.clone(),
-            material: materials.add(StandardMaterial {
-                base_color: Color::RED,
-                specular_transmission: 0.9,
-                diffuse_transmission: 1.0,
-                thickness: 1.8,
-                ior: 1.5,
-                perceptual_roughness: 0.12,
-                ..default()
-            }),
-            transform: Transform::from_xyz(1.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
-            ..default()
-        },
-        NotTransmittedShadowReceiver,
-        ExampleControls {
-            color: true,
-            specular_transmission: true,
-            diffuse_transmission: false,
-        },
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: icosphere_mesh.clone(),
+    //         material: materials.add(StandardMaterial {
+    //             base_color: Color::RED,
+    //             specular_transmission: 0.9,
+    //             diffuse_transmission: 1.0,
+    //             thickness: 1.8,
+    //             ior: 1.5,
+    //             perceptual_roughness: 0.12,
+    //             ..default()
+    //         }),
+    //         transform: Transform::from_xyz(1.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
+    //         ..default()
+    //     },
+    //     NotTransmittedShadowReceiver,
+    //     ExampleControls {
+    //         color: true,
+    //         specular_transmission: true,
+    //         diffuse_transmission: false,
+    //     },
+    // ));
 
     // G Sphere
-    commands.spawn((
-        PbrBundle {
-            mesh: icosphere_mesh.clone(),
-            material: materials.add(StandardMaterial {
-                base_color: Color::GREEN,
-                specular_transmission: 0.9,
-                diffuse_transmission: 1.0,
-                thickness: 1.8,
-                ior: 1.5,
-                perceptual_roughness: 0.12,
-                ..default()
-            }),
-            transform: Transform::from_xyz(0.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
-            ..default()
-        },
-        NotTransmittedShadowReceiver,
-        ExampleControls {
-            color: true,
-            specular_transmission: true,
-            diffuse_transmission: false,
-        },
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: icosphere_mesh.clone(),
+    //         material: materials.add(StandardMaterial {
+    //             base_color: Color::GREEN,
+    //             specular_transmission: 0.9,
+    //             diffuse_transmission: 1.0,
+    //             thickness: 1.8,
+    //             ior: 1.5,
+    //             perceptual_roughness: 0.12,
+    //             ..default()
+    //         }),
+    //         transform: Transform::from_xyz(0.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
+    //         ..default()
+    //     },
+    //     NotTransmittedShadowReceiver,
+    //     ExampleControls {
+    //         color: true,
+    //         specular_transmission: true,
+    //         diffuse_transmission: false,
+    //     },
+    // ));
 
     // B Sphere
-    commands.spawn((
-        PbrBundle {
-            mesh: icosphere_mesh,
-            material: materials.add(StandardMaterial {
-                base_color: Color::BLUE,
-                specular_transmission: 0.9,
-                diffuse_transmission: 1.0,
-                thickness: 1.8,
-                ior: 1.5,
-                perceptual_roughness: 0.12,
-                ..default()
-            }),
-            transform: Transform::from_xyz(-1.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
-            ..default()
-        },
-        NotTransmittedShadowReceiver,
-        ExampleControls {
-            color: true,
-            specular_transmission: true,
-            diffuse_transmission: false,
-        },
-    ));
+    // commands.spawn((
+    //     PbrBundle {
+    //         mesh: icosphere_mesh,
+    //         material: materials.add(StandardMaterial {
+    //             base_color: Color::BLUE,
+    //             specular_transmission: 0.9,
+    //             diffuse_transmission: 1.0,
+    //             thickness: 1.8,
+    //             ior: 1.5,
+    //             perceptual_roughness: 0.12,
+    //             ..default()
+    //         }),
+    //         transform: Transform::from_xyz(-1.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
+    //         ..default()
+    //     },
+    //     NotTransmittedShadowReceiver,
+    //     ExampleControls {
+    //         color: true,
+    //         specular_transmission: true,
+    //         diffuse_transmission: false,
+    //     },
+    // ));
 
     // Chessboard Plane
     let black_material = materials.add(StandardMaterial {
@@ -298,40 +306,145 @@ fn setup(
                     diffuse_transmission: false,
                 },
             ));
+
+            commands.spawn((
+                PbrBundle {
+                    mesh: plane_mesh.clone(),
+                    material: if (x + z) % 2 == 0 {
+                        black_material.clone()
+                    } else {
+                        white_material.clone()
+                    },
+                    transform: Transform::from_xyz(x as f32 * 2.0, 4.0, z as f32 * 2.0)
+                        .with_rotation(Quat::from_rotation_x(PI)),
+                    ..default()
+                },
+                ExampleControls {
+                    color: true,
+                    specular_transmission: false,
+                    diffuse_transmission: false,
+                },
+            ));
         }
     }
 
     // Paper
+    commands.spawn(
+        (PbrBundle {
+            mesh: plane_mesh.clone(),
+            material: materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: Color::rgba(3.0, 2.6, 3.3, 1.0) * 1.5,
+                emissive_texture: Some(asset_server.load("balcony.jpeg")),
+                depth_map: Some(asset_server.load("balcony_depth.jpeg")),
+                parallax_depth_scale: 0.5,
+                parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 40 },
+                max_parallax_layer_count: 300.0,
+                perceptual_roughness: 0.8,
+                reflectance: 0.0,
+                double_sided: true,
+                // cull_mode: None,
+                ..default()
+            }),
+            transform: Transform::from_xyz(0.04, 1.0, 0.0)
+                .with_scale(Vec3::new(3.0, 1.0, 3.0))
+                .with_rotation(Quat::from_euler(
+                    EulerRot::XYZ,
+                    PI / 2.0,
+                    0.0,
+                    0.0 + PI / 2.0,
+                )),
+            ..default()
+        }),
+    );
+
+    commands.spawn(
+        (PbrBundle {
+            mesh: plane_mesh.clone(),
+            material: materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: Color::rgba(3.0, 2.6, 3.3, 1.0) * 1.5,
+                emissive_texture: Some(asset_server.load("basket.jpeg")),
+                depth_map: Some(asset_server.load("basket_depth.jpeg")),
+                parallax_depth_scale: 0.5,
+                parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 40 },
+                max_parallax_layer_count: 300.0,
+                perceptual_roughness: 0.8,
+                reflectance: 0.0,
+                double_sided: true,
+                // cull_mode: None,
+                ..default()
+            }),
+            transform: Transform::from_xyz(-0.04, 1.0, 0.0)
+                .with_scale(Vec3::new(3.0, 1.0, 3.0))
+                .with_rotation(Quat::from_euler(
+                    EulerRot::XYZ,
+                    PI / 2.0,
+                    0.0,
+                    PI + PI / 2.0,
+                )),
+            ..default()
+        }),
+    );
+
     commands.spawn((
         PbrBundle {
             mesh: plane_mesh,
             material: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
-                diffuse_transmission: 0.6,
-                perceptual_roughness: 0.8,
-                reflectance: 1.0,
+                base_color_texture: Some(asset_server.load("lcdgrid.jpeg")),
+                metallic_roughness_texture: Some(asset_server.load("scratches.jpeg")),
+                // normal_map_texture: Some(asset_server.load("scratches_normal.png")),
+                #[cfg(feature = "pbr_transmission_textures")]
+                thickness_texture: Some(asset_server.load("lcdgrid.jpeg")),
+                // depth_map: Some(asset_server.load("lcdgrid.jpeg")),
+                // parallax_depth_scale: 0.52,
+                // parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 40 },
+                // max_parallax_layer_count: 300.0,
+                perceptual_roughness: 0.2,
+                thickness: 0.02,
+                ior: 1.5,
                 double_sided: true,
                 cull_mode: None,
+                specular_transmission: 1.0,
+                reflectance: 0.002,
                 ..default()
             }),
-            transform: Transform::from_xyz(0.0, 0.5, -3.0)
-                .with_scale(Vec3::new(2.0, 1.0, 1.0))
-                .with_rotation(Quat::from_euler(EulerRot::XYZ, PI / 2.0, 0.0, 0.0)),
+            transform: Transform::from_xyz(0.0, 1.0, 0.00)
+                .with_scale(Vec3::new(3.0, 1.0, 3.0))
+                .with_rotation(Quat::from_euler(
+                    EulerRot::XYZ,
+                    PI / 2.0,
+                    0.0,
+                    0.0 + PI / 2.0,
+                )),
             ..default()
         },
-        ExampleControls {
-            specular_transmission: false,
-            color: false,
-            diffuse_transmission: true,
-        },
+        NotShadowCaster,
     ));
 
     // Candle Light
     commands.spawn((
         PointLightBundle {
-            transform: Transform::from_xyz(-1.0, 1.7, 0.0),
+            transform: Transform::from_xyz(0.0, 1.7, 1.0),
             point_light: PointLight {
-                color: Color::ANTIQUE_WHITE * 0.8 + Color::ORANGE_RED * 0.2,
+                color: Color::ANTIQUE_WHITE * 1.0,
+                intensity: 1600.0,
+                radius: 0.2,
+                range: 5.0,
+                shadows_enabled: true,
+                ..default()
+            },
+            ..default()
+        },
+        Flicker,
+    ));
+
+    commands.spawn((
+        PointLightBundle {
+            transform: Transform::from_xyz(0.0, 5.0, 1.0),
+            point_light: PointLight {
+                color: Color::ANTIQUE_WHITE * 1.0,
                 intensity: 1600.0,
                 radius: 0.2,
                 range: 5.0,
@@ -350,9 +463,10 @@ fn setup(
                 hdr: true,
                 ..default()
             },
-            transform: Transform::from_xyz(1.0, 1.8, 7.0).looking_at(Vec3::ZERO, Vec3::Y),
+            transform: Transform::from_xyz(1.0, 1.8, 7.0)
+                .looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
             color_grading: ColorGrading {
-                exposure: -2.0,
+                exposure: -1.0,
                 post_saturation: 1.2,
                 ..default()
             },
@@ -562,38 +676,38 @@ fn example_control_system(
     );
 
     let mut display = display.single_mut();
-    display.sections[0].value = format!(
-        concat!(
-            " J / K / L / ;  Screen Space Specular Transmissive Quality: {:?}\n",
-            "         O / P  Screen Space Specular Transmissive Steps: {}\n",
-            "         1 / 2  Diffuse Transmission: {:.2}\n",
-            "         Q / W  Specular Transmission: {:.2}\n",
-            "         A / S  Thickness: {:.2}\n",
-            "         Z / X  IOR: {:.2}\n",
-            "         E / R  Perceptual Roughness: {:.2}\n",
-            "    Arrow Keys  Control Camera\n",
-            "             C  Randomize Colors\n",
-            "             H  HDR: {}\n",
-            "             D  Depth Prepass+TAA: {}\n",
-        ),
-        camera_3d.screen_space_specular_transmission_quality,
-        camera_3d.screen_space_specular_transmission_steps,
-        state.diffuse_transmission,
-        state.specular_transmission,
-        state.thickness,
-        state.ior,
-        state.perceptual_roughness,
-        if camera.hdr { "ON " } else { "OFF" },
-        if cfg!(any(not(feature = "webgl2"), not(target_arch = "wasm32"))) {
-            if depth_prepass.is_some() {
-                "ON "
-            } else {
-                "OFF"
-            }
-        } else {
-            "N/A"
-        },
-    );
+    // display.sections[0].value = format!(
+    //     concat!(
+    //         " J / K / L / ;  Screen Space Specular Transmissive Quality: {:?}\n",
+    //         "         O / P  Screen Space Specular Transmissive Steps: {}\n",
+    //         "         1 / 2  Diffuse Transmission: {:.2}\n",
+    //         "         Q / W  Specular Transmission: {:.2}\n",
+    //         "         A / S  Thickness: {:.2}\n",
+    //         "         Z / X  IOR: {:.2}\n",
+    //         "         E / R  Perceptual Roughness: {:.2}\n",
+    //         "    Arrow Keys  Control Camera\n",
+    //         "             C  Randomize Colors\n",
+    //         "             H  HDR: {}\n",
+    //         "             D  Depth Prepass+TAA: {}\n",
+    //     ),
+    //     camera_3d.screen_space_specular_transmission_quality,
+    //     camera_3d.screen_space_specular_transmission_steps,
+    //     state.diffuse_transmission,
+    //     state.specular_transmission,
+    //     state.thickness,
+    //     state.ior,
+    //     state.perceptual_roughness,
+    //     if camera.hdr { "ON " } else { "OFF" },
+    //     if cfg!(any(not(feature = "webgl2"), not(target_arch = "wasm32"))) {
+    //         if depth_prepass.is_some() {
+    //             "ON "
+    //         } else {
+    //             "OFF"
+    //         }
+    //     } else {
+    //         "N/A"
+    //     },
+    // );
 }
 
 fn flicker_system(
