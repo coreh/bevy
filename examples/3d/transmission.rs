@@ -36,12 +36,19 @@ use bevy::{
 #[cfg(not(all(feature = "webgl2", target_arch = "wasm32")))]
 use bevy::core_pipeline::experimental::taa::{TemporalAntiAliasBundle, TemporalAntiAliasPlugin};
 
+use bevy_internal::{
+    pbr::{ExtendedMaterial, MaterialExtension},
+    render::render_resource::{AsBindGroup, ShaderRef},
+};
 use rand::random;
 
 fn main() {
     let mut app = App::new();
 
     app.add_plugins(DefaultPlugins)
+        .add_plugins(MaterialPlugin::<
+            ExtendedMaterial<StandardMaterial, MyExtension>,
+        >::default())
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(PointLightShadowMap { size: 2048 })
         .insert_resource(AmbientLight {
@@ -66,6 +73,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut extended_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, MyExtension>>>,
     asset_server: Res<AssetServer>,
 ) {
     let icosphere_mesh = meshes.add(
@@ -170,16 +178,19 @@ fn setup(
 
     // Glass Sphere
     commands.spawn((
-        PbrBundle {
+        MaterialMeshBundle {
             mesh: icosphere_mesh.clone(),
-            material: materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                specular_transmission: 0.9,
-                diffuse_transmission: 1.0,
-                thickness: 1.8,
-                ior: 1.5,
-                perceptual_roughness: 0.12,
-                ..default()
+            material: extended_materials.add(ExtendedMaterial {
+                base: StandardMaterial {
+                    base_color: Color::WHITE,
+                    specular_transmission: 0.9,
+                    diffuse_transmission: 1.0,
+                    thickness: 1.8,
+                    ior: 1.5,
+                    perceptual_roughness: 0.12,
+                    ..default()
+                },
+                extension: MyExtension { quantize_steps: 3 },
             }),
             transform: Transform::from_xyz(1.0, 0.0, 0.0),
             ..default()
@@ -423,7 +434,12 @@ impl Default for ExampleState {
 fn example_control_system(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut extended_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, MyExtension>>>,
     controllable: Query<(&Handle<StandardMaterial>, &ExampleControls)>,
+    extended_controllable: Query<(
+        &Handle<ExtendedMaterial<StandardMaterial, MyExtension>>,
+        &ExampleControls,
+    )>,
     mut camera: Query<
         (
             Entity,
@@ -473,6 +489,26 @@ fn example_control_system(
 
     for (material_handle, controls) in &controllable {
         let material = materials.get_mut(material_handle).unwrap();
+        if controls.specular_transmission {
+            material.specular_transmission = state.specular_transmission;
+            material.thickness = state.thickness;
+            material.ior = state.ior;
+            material.perceptual_roughness = state.perceptual_roughness;
+        }
+
+        if controls.diffuse_transmission {
+            material.diffuse_transmission = state.diffuse_transmission;
+        }
+
+        if controls.color && randomize_colors {
+            material.base_color.set_r(random());
+            material.base_color.set_g(random());
+            material.base_color.set_b(random());
+        }
+    }
+
+    for (material_handle, controls) in &extended_controllable {
+        let material = &mut extended_materials.get_mut(material_handle).unwrap().base;
         if controls.specular_transmission {
             material.specular_transmission = state.specular_transmission;
             material.thickness = state.thickness;
@@ -613,4 +649,22 @@ fn flicker_system(
     flame_transform.rotate(Quat::from_euler(EulerRot::XYZ, 0.0, 0.0, PI / 2.0));
     light_transform.translation = Vec3::new(-1.0 - c, 1.7, 0.0 - a);
     flame_transform.translation = Vec3::new(-1.0 - c, 1.23, 0.0 - a);
+}
+
+#[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
+struct MyExtension {
+    // We need to ensure that the bindings of the base material and the extension do not conflict,
+    // so we start from binding slot 100, leaving slots 0-99 for the base material.
+    #[uniform(100)]
+    quantize_steps: u32,
+}
+
+impl MaterialExtension for MyExtension {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/extended_material.wgsl".into()
+    }
+
+    fn deferred_fragment_shader() -> ShaderRef {
+        "shaders/extended_material.wgsl".into()
+    }
 }
