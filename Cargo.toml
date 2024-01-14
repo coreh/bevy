@@ -62,6 +62,7 @@ default = [
   "bevy_sprite",
   "bevy_text",
   "bevy_ui",
+  "bevy_remote",
   "multi-threaded",
   "png",
   "hdr",
@@ -130,6 +131,9 @@ bevy_ui = [
   "bevy_text",
   "bevy_sprite",
 ]
+
+# Provides remote inspection functionality
+bevy_remote = ["bevy_internal/bevy_remote"]
 
 # winit window and input backend
 bevy_winit = ["bevy_internal/bevy_winit"]
