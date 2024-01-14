@@ -17,6 +17,7 @@ impl From<BrpResponse> for rouille::Response {
                 BrpError::ComponentNotFound => response.with_status_code(404),
                 BrpError::Timeout => response.with_status_code(408),
                 BrpError::InternalError => response.with_status_code(500),
+                BrpError::Unimplemented => response.with_status_code(501),
                 _ => response.with_status_code(400),
             },
             _ => response,
