@@ -125,6 +125,9 @@
                 <option value="ui-text">Query UI Text</option>
                 <option value="non-ui">Query Non-UI Entities</option>
                 <option value="root-entities">Query Root Entities</option>
+                <hr>
+                <option value="invalid">Invalid Request</option>
+                <option value="unimplemented">Unimplemented Request</option>
             </select>
         </div>
         <textarea id="request" placeholder="Request Payload (JSON)"></textarea>
@@ -211,6 +214,21 @@
                         }
                     },
                 };
+            } else if (value === "invalid") {
+                json = {
+                    request: "FOO",
+                };
+            } else if (value === "unimplemented") {
+                json = {
+                    request: "POLL",
+                    params: {
+                        data: {
+                            components: ["bevy_pbr::light::PointLight"],
+                        }
+                    },
+                };
+            } else {
+                json = {};
             }
 
             document.querySelector("#request").value = JSON.stringify(json, null, 2);
