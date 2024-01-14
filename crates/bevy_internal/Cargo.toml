@@ -142,6 +142,8 @@ bevy_render = ["dep:bevy_render", "bevy_scene?/bevy_render"]
 
 bevy_remote = ["dep:bevy_remote"]
 
+remote_http = ["bevy_remote/http"]
+
 # Enable assertions to check the validity of parameters passed to glam
 glam_assert = ["bevy_math/glam_assert"]
 

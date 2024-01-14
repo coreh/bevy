@@ -177,8 +177,24 @@ pub enum BrpError {
     EntityNotFound,
     ComponentNotFound,
     ComponentTypeMismatch,
+    InvalidRequest,
     InvalidEntity,
     InvalidQuery,
     InvalidWatermark,
+    InternalError,
+    Timeout,
     Other(String),
+}
+
+impl BrpResponse {
+    pub fn from_error(id: BrpId, error: BrpError) -> Self {
+        Self {
+            id,
+            response: BrpResponseContent::Error(error),
+        }
+    }
+
+    pub fn from_content(id: BrpId, response: BrpResponseContent) -> Self {
+        Self { id, response }
+    }
 }
