@@ -2,7 +2,7 @@ use std::any::TypeId;
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
 use bevy_ecs::{
-    component::{ComponentDescriptor, ComponentId},
+    component::ComponentId,
     query::QueryBuilder,
     reflect::AppTypeRegistry,
     schedule::ScheduleLabel,
@@ -10,7 +10,7 @@ use bevy_ecs::{
     world::{FilteredEntityRef, World},
 };
 use bevy_log::debug;
-use bevy_reflect::{serde::ReflectSerializer, ReflectFromPtr, ReflectSerialize};
+use bevy_reflect::{serde::ReflectSerializer, ReflectFromPtr};
 use bevy_utils::hashbrown::{HashMap, HashSet};
 use brp::*;
 use crossbeam_channel::{Receiver, Sender};
@@ -216,7 +216,7 @@ fn process_brp_requests(world: &mut World) {
                             break 'request_loop;
                         };
 
-                        builder.with_id(component_ids_by_string[&component_name.0]);
+                        builder.with_id(*component_id);
                     }
 
                     for component_name in &filter.without {
@@ -232,7 +232,7 @@ fn process_brp_requests(world: &mut World) {
                             break 'request_loop;
                         };
 
-                        builder.without_id(component_ids_by_string[&component_name.0]);
+                        builder.without_id(*component_id);
                     }
 
                     let mut query = builder.build();
