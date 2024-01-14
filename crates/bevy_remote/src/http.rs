@@ -49,6 +49,15 @@ impl Plugin for HttpRemotePlugin {
         // spawn the http thread
         std::thread::spawn(move || {
             rouille::start_server("localhost:8765", move |request| {
+                if request.url() == "/" && request.method() == "GET" {
+                    return rouille::Response::html(include_str!("index.html"));
+                }
+
+                if request.url() != "/brp" {
+                    warn!("Invalid URL: {}", request.url());
+                    return rouille::Response::empty_404();
+                }
+
                 if request.method() != "POST" {
                     warn!("Invalid HTTP method: {}", request.method());
                     return BrpResponse::from_error(0, BrpError::InvalidRequest).into();

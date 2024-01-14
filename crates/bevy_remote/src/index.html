@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Bevy Remote</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        * {
+            font-family: system-ui;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --ui-01: #18181a;
+            --ui-02: #232326;
+            --ui-03: #39393e;
+            --ui-04: #7c7c87;
+            --ui-05: #ffffff;
+            --ui-error: #cc3b40;
+            --ui-warning: #f8a34e;
+            --ui-success: #6bc46d;
+            font-size: 14px;
+            background: var(--ui-02);
+            color: var(--ui-05);
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        button,
+        select {
+            display: block;
+            appearance: none;
+            background-color: var(--ui-03);
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.3rem 1rem;
+            color: var(--text-color);
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.04s ease-in-out;
+            margin: 0;
+        }
+
+        .select-wrapper {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .select-wrapper::after {
+            content: "⏷";
+            position: absolute;
+            right: 0.8rem;
+            top: 50%;
+            pointer-events: none;
+            transform: translateY(-50%);
+        }
+
+        button:hover {
+            filter: brightness(1.2);
+        }
+
+        button:active {
+            filter: brightness(0.8);
+        }
+
+        input,
+        textarea {
+            padding: 10px;
+            font-size: inherit;
+            outline: none;
+            display: block;
+            border: none;
+            font-family: monospace;
+            background: var(--ui-01);
+            color: var(--ui-05);
+            border-radius: 0.5rem;
+        }
+
+        textarea {
+            resize: vertical;
+            width: 100%;
+            min-width: 100%;
+            min-height: 150px;
+            flex-grow: 1;
+        }
+
+        label {
+            color: var(--ui-04);
+        }
+
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 600px;
+        }
+
+        h1 {
+            margin: 0;
+            padding: 0;
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="section">
+        <h1>Bevy Remote Protocol (BRP) Tool</h1>
+        <label for="request">Request</label>
+        <div class="select-wrapper">
+            <select>
+                <option>Choose an Example</option>
+                <hr>
+                <option value="ping">Ping</option>
+                <option value="all-entities">Query All Entities</option>
+                <option value="point-lights">Query Point Lights</option>
+            </select>
+        </div>
+        <textarea id="request" placeholder="Request Payload (JSON)"></textarea>
+        <button id="send">Submit</button>
+        <label for="query">Response</label>
+        <textarea readonly id="result" style="height: 400px"" placeholder=" Response Payload (JSON)"></textarea>
+    </div>
+
+    <script>
+        document.querySelector("#send").addEventListener("click", async () => {
+            const request = document.querySelector("#request").value;
+            const res = await fetch("/brp", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: request,
+            });
+            const json = JSON.parse(await res.text(), (key, value) => {
+                if (value.JSON) {
+                    return JSON.parse(value.JSON)[key];
+                }
+                return value;
+            });
+            document.querySelector("#result").value = JSON.stringify(json, null, 2);
+
+            if (res.status >= 500) {
+                document.querySelector("#result").style.color = "var(--ui-error)";
+            } else if (res.status >= 400) {
+                document.querySelector("#result").style.color = "var(--ui-warning)";
+            } else {
+                document.querySelector("#result").style.color = "var(--ui-success)";
+            }
+        });
+
+        document.querySelector("select").addEventListener("change", (e) => {
+            const value = e.target.value;
+            let json;
+            if (value === "ping") {
+                json = {
+                    request: "PING",
+                };
+            } else if (value === "all-entities") {
+                json = {
+                    request: "QUERY",
+                    params: {},
+                };
+            } else if (value === "point-lights") {
+                json = {
+                    request: "QUERY",
+                    params: {
+                        data: {
+                            components: ["bevy_pbr::light::PointLight"],
+                        }
+                    },
+                };
+            }
+
+            document.querySelector("#request").value = JSON.stringify(json, null, 2);
+        });
+
+    </script>
+
+</body>
