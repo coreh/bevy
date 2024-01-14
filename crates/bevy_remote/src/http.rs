@@ -42,6 +42,9 @@ impl Plugin for HttpRemotePlugin {
         let response_receiver = brp_channels.response_receiver.clone();
         let response_loopback = brp_channels.response_sender.clone();
 
+        // atomic counter for request ids
+        let request_id = std::sync::atomic::AtomicU64::new(0);
+
         // spawn the http thread
         std::thread::spawn(move || {
             rouille::start_server("localhost:8765", move |request| {
@@ -50,10 +53,15 @@ impl Plugin for HttpRemotePlugin {
                     return BrpResponse::from_error(0, BrpError::InvalidRequest).into();
                 }
 
-                let Ok(brp_request) = BrpRequest::try_from(request) else {
+                let Ok(mut brp_request) = BrpRequest::try_from(request) else {
                     warn!("Invalid request: {:?}", request);
                     return BrpResponse::from_error(0, BrpError::InvalidRequest).into();
                 };
+
+                // For HTTP, ignore the request id from the client and generate a new one
+                brp_request.id = request_id
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                    .into();
 
                 let now = std::time::Instant::now();
 

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BrpRequest {
+    #[serde(default)]
     pub id: BrpId,
 
     #[serde(flatten)]
@@ -131,6 +132,7 @@ pub struct BrpQueryFilter {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BrpResponse {
+    #[serde(default)]
     pub id: BrpId,
 
     #[serde(flatten)]
