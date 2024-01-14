@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>Bevy Remote</title>
+    <title>Bevy Remote Protocol (BRP) Tool</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
         * {
@@ -27,9 +27,9 @@
 
         body {
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
             height: 100vh;
+            margin: 0;
         }
 
         button,
@@ -84,10 +84,9 @@
         }
 
         textarea {
-            resize: vertical;
+            resize: none;
             width: 100%;
             min-width: 100%;
-            min-height: 150px;
             flex-grow: 1;
         }
 
@@ -95,11 +94,13 @@
             color: var(--ui-04);
         }
 
-        .section {
+        section {
             display: flex;
             flex-direction: column;
             gap: 10px;
-            width: 600px;
+            width: 100%;
+            height: 100%;
+            padding: 10px;
         }
 
         h1 {
@@ -111,7 +112,7 @@
 </head>
 
 <body>
-    <div class="section">
+    <section>
         <h1>Bevy Remote Protocol (BRP) Tool</h1>
         <label for="request">Request</label>
         <div class="select-wrapper">
@@ -121,13 +122,14 @@
                 <option value="ping">Ping</option>
                 <option value="all-entities">Query All Entities</option>
                 <option value="point-lights">Query Point Lights</option>
+                <option value="ui-text">Query UI Text</option>
             </select>
         </div>
         <textarea id="request" placeholder="Request Payload (JSON)"></textarea>
         <button id="send">Submit</button>
         <label for="query">Response</label>
-        <textarea readonly id="result" style="height: 400px"" placeholder=" Response Payload (JSON)"></textarea>
-    </div>
+        <textarea readonly id="result" style="flex-grow: 2" placeholder=" Response Payload (JSON)"></textarea>
+    </section>
 
     <script>
         document.querySelector("#send").addEventListener("click", async () => {
@@ -174,6 +176,18 @@
                     params: {
                         data: {
                             components: ["bevy_pbr::light::PointLight"],
+                        }
+                    },
+                };
+            } else if (value === "ui-text") {
+                json = {
+                    request: "QUERY",
+                    params: {
+                        data: {
+                            components: ["bevy_text::text::Text"],
+                        },
+                        filter: {
+                            with: ["bevy_ui::ui_node::Node"]
                         }
                     },
                 };
