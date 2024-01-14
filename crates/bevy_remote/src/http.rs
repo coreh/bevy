@@ -1,5 +1,6 @@
 use crate::{brp::*, BrpChannels};
 use bevy_app::{App, Plugin};
+use bevy_log::{debug, warn};
 use std::time::Duration;
 
 pub struct HttpRemotePlugin;
@@ -43,7 +44,13 @@ impl Plugin for HttpRemotePlugin {
         // spawn the http thread
         std::thread::spawn(move || {
             rouille::start_server("localhost:8765", move |request| {
+                if request.method() != "POST" {
+                    warn!("Invalid HTTP method: {}", request.method());
+                    return BrpResponse::from_error(0, BrpError::InvalidRequest).into();
+                }
+
                 let Ok(brp_request) = BrpRequest::try_from(request) else {
+                    warn!("Invalid request: {:?}", request);
                     return BrpResponse::from_error(0, BrpError::InvalidRequest).into();
                 };
 
@@ -51,30 +58,44 @@ impl Plugin for HttpRemotePlugin {
 
                 let id = brp_request.id;
 
+                debug!("Sending request to channel: {:?}", brp_request);
+
                 match request_sender.send(brp_request) {
                     Ok(_) => {}
                     Err(_) => {
+                        warn!("Failed to send request to channel");
                         return BrpResponse::from_error(id, BrpError::InternalError).into();
                     }
                 };
 
+                let deadline = now + HTTP_REQUEST_TIMEOUT;
+
                 loop {
-                    match response_receiver.recv() {
+                    match response_receiver.recv_deadline(deadline) {
                         Ok(brp_response) => {
+                            debug!("Received response from channel: {:?}", brp_response);
                             if brp_response.id == id {
                                 // The response is for this request
                                 return brp_response.into();
                             } else {
                                 if now.elapsed() > HTTP_REQUEST_TIMEOUT {
+                                    warn!("Request timed out");
                                     return BrpResponse::from_error(id, BrpError::Timeout).into();
                                 }
 
                                 // The response is not for this request, so send it back to the loopback
                                 // This is a hack to avoid having to implement a hashmap of request ids
+                                debug!("Sending response to loopback: {:?}", brp_response);
                                 response_loopback.send(brp_response).unwrap();
                             }
                         }
-                        Err(_) => {
+                        Err(err) => {
+                            if err == crossbeam_channel::RecvTimeoutError::Timeout {
+                                warn!("Request timed out");
+                                return BrpResponse::from_error(id, BrpError::Timeout).into();
+                            }
+
+                            warn!("Failed to receive response from channel");
                             return BrpResponse::from_error(id, BrpError::InternalError).into();
                         }
                     }

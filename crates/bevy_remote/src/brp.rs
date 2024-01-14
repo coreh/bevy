@@ -138,7 +138,7 @@ pub struct BrpResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
+#[serde(tag = "response", content = "content")]
 pub enum BrpResponseContent {
     #[serde(rename = "OK")]
     Ok,
