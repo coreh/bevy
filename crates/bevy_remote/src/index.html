@@ -123,6 +123,8 @@
                 <option value="all-entities">Query All Entities</option>
                 <option value="point-lights">Query Point Lights</option>
                 <option value="ui-text">Query UI Text</option>
+                <option value="non-ui">Query Non-UI Entities</option>
+                <option value="root-entities">Query Root Entities</option>
             </select>
         </div>
         <textarea id="request" placeholder="Request Payload (JSON)"></textarea>
@@ -188,6 +190,24 @@
                         },
                         filter: {
                             with: ["bevy_ui::ui_node::Node"]
+                        }
+                    },
+                };
+            } else if (value === "non-ui") {
+                json = {
+                    request: "QUERY",
+                    params: {
+                        filter: {
+                            without: ["bevy_ui::ui_node::Node"]
+                        }
+                    },
+                };
+            } else if (value === "root-entities") {
+                json = {
+                    request: "QUERY",
+                    params: {
+                        filter: {
+                            without: ["bevy_hierarchy::components::parent::Parent"]
                         }
                     },
                 };
