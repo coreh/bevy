@@ -2646,6 +2646,18 @@ description = "Demonstrates creating and using custom Ui materials"
 category = "UI (User Interface)"
 wasm = true
 
+[[example]]
+name = "remote_http"
+path = "examples/remote/http.rs"
+doc-scrape-examples = true
+required-features = ["remote_http"]
+
+[package.metadata.example.remote_http]
+name = "Remote via HTTP"
+description = "Demonstrate the use of the Remote plugin with HTTP"
+category = "Remote"
+wasm = false
+
 [profile.wasm-release]
 inherits = "release"
 opt-level = "z"
