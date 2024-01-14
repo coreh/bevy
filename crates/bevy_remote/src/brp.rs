@@ -60,7 +60,7 @@ pub type BrpId = u64;
 pub type BrpWatermark = u64;
 
 #[derive(Debug)]
-pub struct BrpEntity(Entity);
+pub struct BrpEntity(pub Entity);
 
 impl Serialize for BrpEntity {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -96,8 +96,8 @@ impl<'de> Deserialize<'de> for BrpEntity {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Hash, Eq)]
-pub struct BrpComponentName(String);
+#[derive(Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone)]
+pub struct BrpComponentName(pub String);
 
 pub type BrpComponentMap = HashMap<BrpComponentName, BrpComponent>;
 pub type BrpComponentOptionalMap = HashMap<BrpComponentName, Option<BrpComponent>>;
@@ -115,19 +115,19 @@ pub enum BrpComponent {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct BrpQueryData {
     #[serde(default)]
-    components: BrpComponentNames,
+    pub components: BrpComponentNames,
     #[serde(default)]
-    optional: BrpComponentNames,
+    pub optional: BrpComponentNames,
     #[serde(default)]
-    has: BrpComponentNames,
+    pub has: BrpComponentNames,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct BrpQueryFilter {
     #[serde(default)]
-    with: BrpComponentNames,
+    pub with: BrpComponentNames,
     #[serde(default)]
-    without: BrpComponentNames,
+    pub without: BrpComponentNames,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -163,13 +163,13 @@ pub enum BrpResponseContent {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BrpQueryResult {
-    entity: BrpEntity,
+    pub entity: BrpEntity,
     #[serde(default)]
-    components: BrpComponentMap,
+    pub components: BrpComponentMap,
     #[serde(default)]
-    optional: BrpComponentOptionalMap,
+    pub optional: BrpComponentOptionalMap,
     #[serde(default)]
-    has: BrpComponentHasMap,
+    pub has: BrpComponentHasMap,
 }
 
 pub type BrpQueryResults = Vec<BrpQueryResult>;
@@ -177,7 +177,8 @@ pub type BrpQueryResults = Vec<BrpQueryResult>;
 #[derive(Serialize, Deserialize, Debug)]
 pub enum BrpError {
     EntityNotFound,
-    ComponentNotFound,
+    ComponentNotFound(String),
+    ComponentNotReflectable(String),
     ComponentTypeMismatch,
     InvalidRequest,
     InvalidEntity,

@@ -14,7 +14,7 @@ impl From<BrpResponse> for rouille::Response {
         let response = match brp_response.response {
             BrpResponseContent::Error(err) => match err {
                 BrpError::EntityNotFound => response.with_status_code(404),
-                BrpError::ComponentNotFound => response.with_status_code(404),
+                BrpError::ComponentNotFound(_) => response.with_status_code(404),
                 BrpError::Timeout => response.with_status_code(408),
                 BrpError::InternalError => response.with_status_code(500),
                 BrpError::Unimplemented => response.with_status_code(501),
@@ -38,7 +38,7 @@ impl TryFrom<&rouille::Request> for BrpRequest {
 impl Plugin for HttpRemotePlugin {
     fn build(&self, app: &mut App) {
         let mut brp_sessions = app.world.get_resource_mut::<BrpSessions>().unwrap();
-        let brp_session = brp_sessions.open("HTTP");
+        let brp_session = brp_sessions.open("HTTP", crate::BrpComponentFormat::Json);
         let request_sender = brp_session.request_sender.clone();
         let response_receiver = brp_session.response_receiver.clone();
         let response_loopback = brp_session.response_sender.clone();
