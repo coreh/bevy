@@ -120,11 +120,14 @@
                 <option>Choose an Example</option>
                 <hr>
                 <option value="ping">Ping</option>
-                <option value="all-entities">Query All Entities</option>
-                <option value="point-lights">Query Point Lights</option>
-                <option value="ui-text">Query UI Text</option>
-                <option value="non-ui">Query Non-UI Entities</option>
-                <option value="root-entities">Query Root Entities</option>
+                <hr>
+                <option value="query-all-entities">Query: All Entities</option>
+                <option value="query-point-lights">Query: Point Lights</option>
+                <option value="query-ui-text">Query: UI Text</option>
+                <option value="query-non-ui">Query: Non-UI Entities</option>
+                <option value="query-root-entities">Query: Root Entities</option>
+                <option value="query-has-mesh">Query: Has Mesh?</option>
+                <option value="query-optional-names">Query: Optional Names</option>
                 <hr>
                 <option value="invalid">Invalid Request</option>
                 <option value="unimplemented">Unimplemented Request</option>
@@ -173,11 +176,11 @@
             'ping': {
                 request: 'PING',
             },
-            'all-entities': {
+            'query-all-entities': {
                 request: 'QUERY',
                 params: {},
             },
-            'point-lights': {
+            'query-point-lights': {
                 request: 'QUERY',
                 params: {
                     data: {
@@ -185,7 +188,7 @@
                     },
                 },
             },
-            'ui-text': {
+            'query-ui-text': {
                 request: 'QUERY',
                 params: {
                     data: {
@@ -196,7 +199,7 @@
                     },
                 },
             },
-            'non-ui': {
+            'query-non-ui': {
                 request: 'QUERY',
                 params: {
                     filter: {
@@ -204,11 +207,27 @@
                     },
                 },
             },
-            'root-entities': {
+            'query-root-entities': {
                 request: 'QUERY',
                 params: {
                     filter: {
                         without: ['Parent'],
+                    },
+                },
+            },
+            'query-has-mesh': {
+                request: 'QUERY',
+                params: {
+                    data: {
+                        has: ['Handle<Mesh>'],
+                    },
+                },
+            },
+            'query-optional-names': {
+                request: 'QUERY',
+                params: {
+                    data: {
+                        optional: ['Name'],
                     },
                 },
             },
