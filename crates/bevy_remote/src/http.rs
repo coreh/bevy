@@ -1,4 +1,4 @@
-use crate::{brp::*, BrpSessions};
+use crate::{brp::*, RemoteSessions};
 use bevy_app::{App, Plugin};
 use bevy_log::{debug, warn};
 use std::time::Duration;
@@ -37,8 +37,8 @@ impl TryFrom<&rouille::Request> for BrpRequest {
 
 impl Plugin for HttpRemotePlugin {
     fn build(&self, app: &mut App) {
-        let mut brp_sessions = app.world.get_resource_mut::<BrpSessions>().unwrap();
-        let brp_session = brp_sessions.open("HTTP", crate::BrpComponentFormat::Json);
+        let brp_sessions = app.world.get_resource::<RemoteSessions>().unwrap();
+        let brp_session = brp_sessions.open("HTTP", crate::RemoteComponentFormat::Json);
         let request_sender = brp_session.request_sender.clone();
         let response_receiver = brp_session.response_receiver.clone();
         let response_loopback = brp_session.response_sender.clone();

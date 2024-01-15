@@ -178,8 +178,11 @@ pub type BrpQueryResults = Vec<BrpQueryResult>;
 pub enum BrpError {
     EntityNotFound,
     ComponentNotFound(String),
-    ComponentNotReflectable(String),
-    ComponentTypeMismatch,
+    ComponentAmbiguous(String),
+    ComponentMissingTypeId(String),
+    ComponentMissingTypeRegistration(String),
+    ComponentMissingReflect(String),
+    ComponentInvalidAccess(String),
     InvalidRequest,
     InvalidEntity,
     InvalidQuery,

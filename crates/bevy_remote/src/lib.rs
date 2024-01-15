@@ -1,11 +1,8 @@
-use std::{
-    any::TypeId,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
 use bevy_ecs::{
-    component::ComponentId,
+    component::ComponentInfo,
     query::QueryBuilder,
     reflect::AppTypeRegistry,
     schedule::ScheduleLabel,
@@ -13,7 +10,7 @@ use bevy_ecs::{
     world::{FilteredEntityRef, World},
 };
 use bevy_log::debug;
-use bevy_reflect::{serde::ReflectSerializer, ReflectFromPtr};
+use bevy_reflect::{serde::ReflectSerializer, ReflectFromPtr, TypeRegistry};
 use bevy_utils::hashbrown::{HashMap, HashSet};
 use brp::*;
 use crossbeam_channel::{Receiver, Sender};
@@ -35,6 +32,7 @@ impl Plugin for RemotePlugin {
         app.add_systems(Remote, process_brp_sessions);
 
         app.insert_resource(RemoteSessions::default());
+        app.insert_resource(RemoteCache::default());
 
         #[cfg(feature = "http")]
         app.add_plugins(http::HttpRemotePlugin);
@@ -58,6 +56,137 @@ pub struct RemoteSession {
 pub enum RemoteComponentFormat {
     Json,
     Ron,
+}
+
+#[derive(Debug, Clone, Resource, Default)]
+pub struct RemoteCache(Arc<RwLock<RemoteCacheInternal>>);
+
+impl RemoteCache {
+    pub fn update_components<'a>(
+        &self,
+        world: &mut World,
+        component_names: impl IntoIterator<Item = &'a str>,
+    ) {
+        let mut internal = self.0.write().unwrap();
+        let mut missing_components = HashSet::<String>::new();
+
+        for component_name in component_names {
+            if !(*internal).components_by_name.contains_key(component_name)
+                && !(*internal)
+                    .components_by_short_name
+                    .contains_key(component_name)
+            {
+                missing_components.insert(component_name.to_string());
+            }
+        }
+
+        if missing_components.is_empty() {
+            // Bail early if we don't need to update anything
+            return;
+        }
+
+        for component in world.components().iter() {
+            let name = component.name();
+            let short_name = bevy_utils::get_short_name(name);
+
+            if missing_components.contains(name) || missing_components.contains(&short_name) {
+                (*internal)
+                    .components_by_name
+                    .insert(name.to_string(), component.clone());
+
+                if (*internal)
+                    .components_by_short_name
+                    .contains_key(&short_name)
+                {
+                    (*internal).ambiguous_short_names.insert(short_name.clone());
+                }
+
+                (*internal)
+                    .components_by_short_name
+                    .insert(short_name, component.clone());
+            }
+        }
+    }
+
+    pub fn component_by_name(&self, name: &str) -> Result<ComponentInfo, RemoteComponentError> {
+        let internal = self.0.read().unwrap();
+        if let Some(component) = (*internal).components_by_name.get(name) {
+            return Ok(component.clone());
+        }
+
+        if (*internal).ambiguous_short_names.contains(name) {
+            return Err(RemoteComponentError::Ambiguous);
+        }
+
+        if let Some(component) = (*internal).components_by_short_name.get(name) {
+            return Ok(component.clone());
+        }
+
+        Err(RemoteComponentError::NotFound)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RemoteComponentError {
+    NotFound,
+    Ambiguous,
+    MissingTypeId,
+    MissingTypeRegistration,
+    MissingReflect,
+    InvalidAccess,
+}
+
+macro_rules! try_for_component {
+    ($id:expr, $name:expr, $op:expr) => {
+        match $op {
+            Ok(r) => r,
+            Err(err) => match err {
+                RemoteComponentError::NotFound => {
+                    return BrpResponse::from_error(
+                        $id,
+                        BrpError::ComponentNotFound($name.clone()),
+                    );
+                }
+                RemoteComponentError::Ambiguous => {
+                    return BrpResponse::from_error(
+                        $id,
+                        BrpError::ComponentAmbiguous($name.clone()),
+                    );
+                }
+                RemoteComponentError::MissingTypeId => {
+                    return BrpResponse::from_error(
+                        $id,
+                        BrpError::ComponentMissingTypeId($name.clone()),
+                    );
+                }
+                RemoteComponentError::MissingTypeRegistration => {
+                    return BrpResponse::from_error(
+                        $id,
+                        BrpError::ComponentMissingTypeRegistration($name.clone()),
+                    );
+                }
+                RemoteComponentError::MissingReflect => {
+                    return BrpResponse::from_error(
+                        $id,
+                        BrpError::ComponentMissingReflect($name.clone()),
+                    );
+                }
+                RemoteComponentError::InvalidAccess => {
+                    return BrpResponse::from_error(
+                        $id,
+                        BrpError::ComponentInvalidAccess($name.clone()),
+                    );
+                }
+            },
+        }
+    };
+}
+
+#[derive(Debug, Default)]
+pub struct RemoteCacheInternal {
+    pub components_by_name: HashMap<String, ComponentInfo>,
+    pub components_by_short_name: HashMap<String, ComponentInfo>,
+    pub ambiguous_short_names: HashSet<String>,
 }
 
 impl RemoteSessions {
@@ -160,89 +289,74 @@ fn process_brp_query_request(
 ) -> BrpResponse {
     let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
 
-    let mut mentioned_components = HashSet::<String>::new();
-    let mut component_id_map = HashMap::<String, ComponentId>::new();
-    let mut type_id_map = HashMap::<String, TypeId>::new();
+    let remote_cache = world.resource::<RemoteCache>().clone();
 
-    for component_name in data
-        .components
-        .iter()
-        .chain(data.optional.iter())
-        .chain(data.has.iter())
-        .chain(filter.with.iter())
-        .chain(filter.without.iter())
-    {
-        mentioned_components.insert(component_name.0.clone());
-    }
-
-    for component in world.components().iter() {
-        let name = component.name();
-        if mentioned_components.contains(name) {
-            component_id_map.insert(name.to_string(), component.id());
-            if let Some(type_id) = component.type_id() {
-                type_id_map.insert(name.to_string(), type_id);
-            }
-        }
-    }
+    remote_cache.update_components(
+        world,
+        data.components
+            .iter()
+            .chain(data.optional.iter())
+            .chain(data.has.iter())
+            .chain(filter.with.iter())
+            .chain(filter.without.iter())
+            .map(|component_name| component_name.0.as_str()),
+    );
 
     let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
 
     for component_name in &data.components {
-        let Some(component_id) = component_id_map.get(&component_name.0) else {
-            return BrpResponse::from_error(
+        builder.ref_id(
+            try_for_component!(
                 id,
-                BrpError::ComponentNotFound(component_name.0.clone()),
-            );
-        };
-
-        builder.ref_id(*component_id);
+                &component_name.0,
+                remote_cache.component_by_name(&component_name.0)
+            )
+            .id(),
+        );
     }
 
     for component_name in &data.optional {
-        let Some(component_id) = component_id_map.get(&component_name.0) else {
-            return BrpResponse::from_error(
-                id,
-                BrpError::ComponentNotFound(component_name.0.clone()),
-            );
-        };
+        let component = try_for_component!(
+            id,
+            &component_name.0,
+            remote_cache.component_by_name(&component_name.0)
+        );
         builder.optional(|query| {
-            query.ref_id(*component_id);
+            query.ref_id(component.id());
         });
     }
 
     for component_name in &data.has {
-        let Some(component_id) = component_id_map.get(&component_name.0) else {
-            return BrpResponse::from_error(
-                id,
-                BrpError::ComponentNotFound(component_name.0.clone()),
-            );
-        };
-
+        let component = try_for_component!(
+            id,
+            &component_name.0,
+            remote_cache.component_by_name(&component_name.0)
+        );
         builder.optional(|query| {
-            query.ref_id(*component_id);
+            query.ref_id(component.id());
         });
     }
 
     for component_name in &filter.with {
-        let Some(component_id) = component_id_map.get(&component_name.0) else {
-            return BrpResponse::from_error(
+        builder.with_id(
+            try_for_component!(
                 id,
-                BrpError::ComponentNotFound(component_name.0.clone()),
-            );
-        };
-
-        builder.with_id(*component_id);
+                &component_name.0,
+                remote_cache.component_by_name(&component_name.0)
+            )
+            .id(),
+        );
     }
 
     for component_name in &filter.without {
-        let Some(component_id) = component_id_map.get(&component_name.0) else {
-            return BrpResponse::from_error(
+        builder.without_id(
+            try_for_component!(
                 id,
-                BrpError::ComponentNotFound(component_name.0.clone()),
-            );
-        };
-
-        builder.without_id(*component_id);
+                &component_name.0,
+                remote_cache.component_by_name(&component_name.0)
+            )
+            .id(),
+        );
     }
 
     let mut query = builder.build();
@@ -258,29 +372,23 @@ fn process_brp_query_request(
         };
 
         for component_name in &data.components {
-            let component_id = component_id_map[&component_name.0];
-            let Some(type_id) = type_id_map.get(&component_name.0) else {
+            let component = try_for_component!(
+                id,
+                &component_name.0,
+                remote_cache.component_by_name(&component_name.0)
+            );
+
+            let output = try_for_component!(
+                id,
+                &component_name.0,
+                serialize_component(&entity, &*type_registry_arc.read(), &component, session)
+            );
+
+            if component.type_id().is_none() {
                 return BrpResponse::from_error(
                     id,
-                    BrpError::ComponentNotReflectable(component_name.0.clone()),
+                    BrpError::ComponentMissingTypeId(component_name.0.clone()),
                 );
-            };
-
-            let type_registry = type_registry_arc.read();
-            let type_registration = type_registry.get(*type_id).unwrap();
-            let reflect_from_ptr = type_registration.data::<ReflectFromPtr>().unwrap();
-            let component_ptr = entity.get_by_id(component_id).unwrap();
-            let reflect = unsafe { reflect_from_ptr.as_reflect(component_ptr) };
-
-            let serializer = ReflectSerializer::new(reflect, &type_registry);
-
-            let output = match session.component_format {
-                RemoteComponentFormat::Ron => {
-                    BrpComponent::Ron(ron::ser::to_string(&serializer).unwrap())
-                }
-                RemoteComponentFormat::Json => {
-                    BrpComponent::Json(serde_json::ser::to_string(&serializer).unwrap())
-                }
             };
 
             result.components.insert(component_name.clone(), output);
@@ -290,4 +398,48 @@ fn process_brp_query_request(
     }
 
     BrpResponse::new(id, BrpResponseContent::Query { entities: results })
+}
+
+fn serialize_component(
+    entity: &FilteredEntityRef<'_>,
+    type_registry: &TypeRegistry,
+    component: &ComponentInfo,
+    session: &RemoteSession,
+) -> Result<BrpComponent, RemoteComponentError> {
+    let component_id = component.id();
+    let Some(type_id) = component.type_id() else {
+        return Err(RemoteComponentError::MissingTypeId);
+    };
+    let type_registration = type_registry.get(type_id);
+    let Some(type_registration) = type_registration else {
+        return Err(RemoteComponentError::MissingTypeRegistration);
+    };
+    let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
+        return Err(RemoteComponentError::MissingReflect);
+    };
+    let Some(component_ptr) = entity.get_by_id(component_id) else {
+        return Err(RemoteComponentError::InvalidAccess);
+    };
+
+    // SAFETY: We got the `ComponentId` and `TypeId` from the same `ComponentInfo` so the
+    // `TypeRegistration`, `ReflectFromPtr` and `&dyn Reflect` are all for the same type,
+    // with the same memory layout.
+    // We don't keep the `&dyn Reflect` we obtain around, we immediately serialize it and
+    // discard it.
+    // The `FilteredEntityRef` guarantees that we hold the proper access to the
+    // data.
+    let output = unsafe {
+        let reflect = reflect_from_ptr.as_reflect(component_ptr);
+        let serializer = ReflectSerializer::new(reflect, &type_registry);
+        match session.component_format {
+            RemoteComponentFormat::Ron => {
+                BrpComponent::Ron(ron::ser::to_string(&serializer).unwrap())
+            }
+            RemoteComponentFormat::Json => {
+                BrpComponent::Json(serde_json::ser::to_string(&serializer).unwrap())
+            }
+        }
+    };
+
+    Ok(output)
 }
