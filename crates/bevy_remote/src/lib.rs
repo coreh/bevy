@@ -363,6 +363,8 @@ fn process_brp_query_request(
 
     let mut results = BrpQueryResults::default();
 
+    let type_registry = &*type_registry_arc.read();
+
     for entity in query.iter(world) {
         let mut result = BrpQueryResult {
             entity: BrpEntity(entity.id()),
@@ -383,7 +385,7 @@ fn process_brp_query_request(
                 try_for_component!(
                     id,
                     &component_name.0,
-                    serialize_component(&entity, &*type_registry_arc.read(), &component, session)
+                    serialize_component(&entity, &type_registry, &component, session)
                 ),
             );
         }
@@ -401,12 +403,7 @@ fn process_brp_query_request(
                     Some(try_for_component!(
                         id,
                         &component_name.0,
-                        serialize_component(
-                            &entity,
-                            &*type_registry_arc.read(),
-                            &component,
-                            session
-                        )
+                        serialize_component(&entity, &type_registry, &component, session)
                     ))
                 } else {
                     None
