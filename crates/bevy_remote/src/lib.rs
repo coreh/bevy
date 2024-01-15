@@ -1,4 +1,7 @@
-use std::any::TypeId;
+use std::{
+    any::TypeId,
+    sync::{Arc, RwLock},
+};
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
 use bevy_ecs::{
@@ -39,7 +42,7 @@ impl Plugin for RemotePlugin {
 }
 
 #[derive(Resource, Default, Clone)]
-pub struct BrpSessions(Vec<BrpSession>);
+pub struct BrpSessions(Arc<RwLock<Vec<BrpSession>>>);
 
 #[derive(Debug, Clone)]
 pub struct BrpSession {
@@ -59,7 +62,7 @@ pub enum BrpComponentFormat {
 
 impl BrpSessions {
     pub fn open(
-        &mut self,
+        &self,
         label: impl Into<String>,
         component_format: BrpComponentFormat,
     ) -> BrpSession {
@@ -75,23 +78,26 @@ impl BrpSessions {
             response_receiver,
         };
 
-        for existing_session in self.0.iter() {
+        let mut sessions = self.0.write().unwrap();
+
+        for existing_session in sessions.iter() {
             assert_ne!(existing_session.label, session.label);
         }
 
-        self.0.push(session.clone());
+        (*sessions).push(session.clone());
 
         session
     }
 
-    pub fn close(&mut self, label: &str) {
-        let index = self
-            .0
+    pub fn close(&self, label: &str) {
+        let mut sessions = self.0.write().unwrap();
+
+        let index = (*sessions)
             .iter()
             .position(|session| session.label == label)
             .unwrap();
 
-        self.0.remove(index);
+        sessions.remove(index);
     }
 }
 
@@ -100,7 +106,7 @@ pub struct ProcessBrp;
 
 fn process_brp_sessions(world: &mut World) {
     let sessions = (*world.resource::<BrpSessions>()).clone();
-    for session in sessions.0.iter() {
+    for session in sessions.0.read().unwrap().iter() {
         process_brp_session(world, session);
     }
 }
