@@ -127,6 +127,8 @@
                 <option value="query-has-mesh">Query: Has Mesh?</option>
                 <option value="query-optional-names">Query: Optional Names</option>
                 <hr>
+                <option value="insert-point-light">Insert: Point Light</option>
+                <hr>
                 <option value="invalid">Invalid Request</option>
                 <option value="unimplemented">Unimplemented Request</option>
             </select>
@@ -139,7 +141,23 @@
 
     <script>
         document.querySelector('#send').addEventListener('click', async () => {
-            const request = document.querySelector('#request').value;
+            let request = document.querySelector('#request').value;
+            try {
+                const requestJSON = JSON.parse(request);
+                request = JSON.stringify(requestJSON, function (key, value) {
+                    if (key === 'components' && typeof value === 'object') {
+                        const result = {};
+                        for (const [childKey, childValue] of Object.entries(value)) {
+                            result[childKey] = { JSON: JSON.stringify(childValue) };
+                        }
+                        return result;
+                    }
+                    return value;
+                }, 2);
+                console.log(request);
+            } catch (e) {
+                reportError(e);
+            }
             const res = await fetch('/brp', {
                 method: 'POST',
                 headers: {
@@ -226,6 +244,30 @@
                 params: {
                     data: {
                         optional: ['Name'],
+                    },
+                },
+            },
+            'insert-point-light': {
+                request: 'INSERT',
+                params: {
+                    entity: '3v0',
+                    components: {
+                        PointLight: {
+                            color: {
+                                Rgba: {
+                                    red: 1,
+                                    green: 0,
+                                    blue: 0,
+                                    alpha: 1
+                                }
+                            },
+                            intensity: 1500,
+                            range: 20,
+                            radius: 0,
+                            shadows_enabled: true,
+                            shadow_depth_bias: 0.02,
+                            shadow_normal_bias: 0.6
+                        }
                     },
                 },
             },

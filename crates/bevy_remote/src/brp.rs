@@ -183,6 +183,7 @@ pub enum BrpError {
     ComponentMissingTypeRegistration(String),
     ComponentMissingReflect(String),
     ComponentInvalidAccess(String),
+    ComponentDeserialization(String),
     InvalidRequest,
     InvalidEntity,
     InvalidQuery,

@@ -1,19 +1,28 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    ptr::NonNull,
+    sync::{Arc, RwLock},
+};
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
 use bevy_ecs::{
     component::ComponentInfo,
+    entity::Entity,
+    ptr::OwningPtr,
     query::QueryBuilder,
     reflect::AppTypeRegistry,
     schedule::ScheduleLabel,
     system::Resource,
-    world::{FilteredEntityRef, World},
+    world::{EntityWorldMut, FilteredEntityRef, World},
 };
-use bevy_log::debug;
-use bevy_reflect::{serde::ReflectSerializer, ReflectFromPtr, TypeRegistry};
+use bevy_log::{debug, warn};
+use bevy_reflect::{
+    serde::{ReflectSerializer, TypedReflectDeserializer},
+    ReflectFromPtr, TypeRegistry,
+};
 use bevy_utils::hashbrown::{HashMap, HashSet};
 use brp::*;
 use crossbeam_channel::{Receiver, Sender};
+use serde::de::DeserializeSeed;
 
 pub mod brp;
 
@@ -134,6 +143,7 @@ pub enum RemoteComponentError {
     MissingTypeRegistration,
     MissingReflect,
     InvalidAccess,
+    Deerialization,
 }
 
 macro_rules! try_for_component {
@@ -175,6 +185,12 @@ macro_rules! try_for_component {
                     return BrpResponse::from_error(
                         $id,
                         BrpError::ComponentInvalidAccess($name.clone()),
+                    );
+                }
+                RemoteComponentError::Deserialization => {
+                    return BrpResponse::from_error(
+                        $id,
+                        BrpError::ComponentDeserialization($name.clone()),
                     );
                 }
             },
@@ -276,6 +292,10 @@ fn process_brp_request(
             ref data,
             ref filter,
         } => process_brp_query_request(world, session, request.id, data, filter),
+        BrpRequestContent::Insert {
+            ref entity,
+            ref components,
+        } => process_brp_insert_request(world, session, request.id, entity, components),
         _ => BrpResponse::from_error(request.id, BrpError::Unimplemented),
     }
 }
@@ -429,6 +449,54 @@ fn process_brp_query_request(
     BrpResponse::new(id, BrpResponseContent::Query { entities: results })
 }
 
+fn process_brp_insert_request(
+    world: &mut World,
+    session: &RemoteSession,
+    id: BrpId,
+    entity: &BrpEntity,
+    components: &HashMap<BrpComponentName, BrpComponent>,
+) -> BrpResponse {
+    let remote_cache = world.resource::<RemoteCache>().clone();
+    let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
+
+    remote_cache.update_components(
+        world,
+        components
+            .keys()
+            .map(|component_name| component_name.0.as_str()),
+    );
+
+    let Some(mut entity) = world.get_entity_mut(entity.0) else {
+        return BrpResponse::from_error(id, BrpError::EntityNotFound);
+    };
+
+    let type_registry = &*type_registry_arc.read();
+
+    for (component_name, component) in components.iter() {
+        debug!("Trying to find component {:?}", component_name);
+        let component_info = try_for_component!(
+            id,
+            &component_name.0,
+            remote_cache.component_by_name(&component_name.0)
+        );
+        debug!("Found component {:?}", component_info);
+
+        try_for_component!(
+            id,
+            &component_name.0,
+            deserialize_component(
+                &mut entity,
+                &type_registry,
+                &component_info,
+                component,
+                session
+            )
+        );
+    }
+
+    BrpResponse::new(id, BrpResponseContent::Ok)
+}
+
 fn serialize_component(
     entity: &FilteredEntityRef<'_>,
     type_registry: &TypeRegistry,
@@ -471,4 +539,66 @@ fn serialize_component(
     };
 
     Ok(output)
+}
+
+fn deserialize_component(
+    entity: &mut EntityWorldMut<'_>,
+    type_registry: &TypeRegistry,
+    component: &ComponentInfo,
+    input: &BrpComponent,
+    session: &RemoteSession,
+) -> Result<(), RemoteComponentError> {
+    let component_id = component.id();
+    let Some(type_id) = component.type_id() else {
+        return Err(RemoteComponentError::MissingTypeId);
+    };
+    let type_registration = type_registry.get(type_id);
+    let Some(type_registration) = type_registration else {
+        return Err(RemoteComponentError::MissingTypeRegistration);
+    };
+    let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
+        return Err(RemoteComponentError::MissingReflect);
+    };
+
+    let reflect_deserializer = TypedReflectDeserializer::new(&type_registration, &type_registry);
+    let reflected = match input {
+        BrpComponent::Json(string) => {
+            if session.component_format != RemoteComponentFormat::Json {
+                warn!("Received component in JSON format, but session is not set to JSON. Accepting anyway.");
+            }
+            let mut deserializer = serde_json::de::Deserializer::from_str(&string);
+            match reflect_deserializer.deserialize(&mut deserializer) {
+                Ok(r) => r,
+                Err(_) => {
+                    return Err(RemoteComponentError::InvalidSerialization);
+                }
+            }
+        }
+        BrpComponent::Ron(string) => {
+            if session.component_format != RemoteComponentFormat::Ron {
+                warn!("Received component in RON format, but session is not set to RON. Accepting anyway.");
+            }
+            let mut deserializer = ron::de::Deserializer::from_str(&string).unwrap();
+            match reflect_deserializer.deserialize(&mut deserializer) {
+                Ok(r) => r,
+                Err(_) => {
+                    return Err(RemoteComponentError::InvalidSerialization);
+                }
+            }
+        }
+    };
+
+    // SAFETY: We got the `ComponentId`, `TypeId` and `Layout` from the same `ComponentInfo` so the
+    // representations are compatible. We hand over the owning pointer to the world entity
+    // after applying the reflected data to it, and its now the world's responsibility to
+    // free the memory.
+    unsafe {
+        let mut owning_ptr =
+            OwningPtr::new(NonNull::new(std::alloc::alloc(component.layout())).unwrap());
+        let reflect = reflect_from_ptr.as_reflect_mut(owning_ptr.as_mut());
+        reflect.apply(&*reflected);
+        entity.insert_by_id(component_id, owning_ptr);
+    };
+
+    Ok(())
 }
