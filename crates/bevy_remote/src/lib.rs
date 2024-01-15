@@ -27,14 +27,14 @@ pub struct RemotePlugin;
 
 impl Plugin for RemotePlugin {
     fn build(&self, app: &mut App) {
-        app.init_schedule(ProcessBrp);
+        app.init_schedule(Remote);
 
         let mut order = app.world.resource_mut::<MainScheduleOrder>();
-        order.insert_after(First, ProcessBrp);
+        order.insert_after(First, Remote);
 
-        app.add_systems(ProcessBrp, process_brp_sessions);
+        app.add_systems(Remote, process_brp_sessions);
 
-        app.insert_resource(BrpSessions::default());
+        app.insert_resource(RemoteSessions::default());
 
         #[cfg(feature = "http")]
         app.add_plugins(http::HttpRemotePlugin);
@@ -42,12 +42,12 @@ impl Plugin for RemotePlugin {
 }
 
 #[derive(Resource, Default, Clone)]
-pub struct BrpSessions(Arc<RwLock<Vec<BrpSession>>>);
+pub struct RemoteSessions(Arc<RwLock<Vec<RemoteSession>>>);
 
 #[derive(Debug, Clone)]
-pub struct BrpSession {
+pub struct RemoteSession {
     pub label: String,
-    pub component_format: BrpComponentFormat,
+    pub component_format: RemoteComponentFormat,
     pub request_sender: Sender<BrpRequest>,
     pub request_receiver: Receiver<BrpRequest>,
     pub response_sender: Sender<BrpResponse>,
@@ -55,21 +55,21 @@ pub struct BrpSession {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BrpComponentFormat {
+pub enum RemoteComponentFormat {
     Json,
     Ron,
 }
 
-impl BrpSessions {
+impl RemoteSessions {
     pub fn open(
         &self,
         label: impl Into<String>,
-        component_format: BrpComponentFormat,
-    ) -> BrpSession {
+        component_format: RemoteComponentFormat,
+    ) -> RemoteSession {
         let (request_sender, request_receiver) = crossbeam_channel::unbounded();
         let (response_sender, response_receiver) = crossbeam_channel::unbounded();
 
-        let session = BrpSession {
+        let session = RemoteSession {
             label: label.into(),
             component_format,
             request_sender,
@@ -102,16 +102,16 @@ impl BrpSessions {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, ScheduleLabel)]
-pub struct ProcessBrp;
+pub struct Remote;
 
 fn process_brp_sessions(world: &mut World) {
-    let sessions = (*world.resource::<BrpSessions>()).clone();
+    let sessions = (*world.resource::<RemoteSessions>()).clone();
     for session in sessions.0.read().unwrap().iter() {
         process_brp_session(world, session);
     }
 }
 
-fn process_brp_session(world: &mut World, session: &BrpSession) {
+fn process_brp_session(world: &mut World, session: &RemoteSession) {
     loop {
         let request = match session.request_receiver.try_recv() {
             Ok(request) => request,
@@ -138,7 +138,7 @@ fn process_brp_session(world: &mut World, session: &BrpSession) {
 
 fn process_brp_request(
     world: &mut World,
-    session: &BrpSession,
+    session: &RemoteSession,
     request: &BrpRequest,
 ) -> BrpResponse {
     match request.request {
@@ -153,7 +153,7 @@ fn process_brp_request(
 
 fn process_brp_query_request(
     world: &mut World,
-    session: &BrpSession,
+    session: &RemoteSession,
     id: BrpId,
     data: &BrpQueryData,
     filter: &BrpQueryFilter,
@@ -275,10 +275,10 @@ fn process_brp_query_request(
             let serializer = ReflectSerializer::new(reflect, &type_registry);
 
             let output = match session.component_format {
-                BrpComponentFormat::Ron => {
+                RemoteComponentFormat::Ron => {
                     BrpComponent::Ron(ron::ser::to_string(&serializer).unwrap())
                 }
-                BrpComponentFormat::Json => {
+                RemoteComponentFormat::Json => {
                     BrpComponent::Json(serde_json::ser::to_string(&serializer).unwrap())
                 }
             };
