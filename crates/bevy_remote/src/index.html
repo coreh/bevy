@@ -128,6 +128,7 @@
                 <option value="query-optional-names">Query: Optional Names</option>
                 <hr>
                 <option value="insert-point-light">Insert: Point Light</option>
+                <option value="insert-transform">Insert: Cube Transform</option>
                 <hr>
                 <option value="invalid">Invalid Request</option>
                 <option value="unimplemented">Unimplemented Request</option>
@@ -267,6 +268,32 @@
                             shadows_enabled: true,
                             shadow_depth_bias: 0.02,
                             shadow_normal_bias: 0.6
+                        }
+                    },
+                },
+            },
+            'insert-transform': {
+                request: 'INSERT',
+                params: {
+                    entity: '2v0',
+                    components: {
+                        Transform: {
+                            translation: {
+                                x: 0,
+                                y: 1,
+                                z: 0
+                            },
+                            rotation: {
+                                x: 0,
+                                y: 0,
+                                z: 0,
+                                w: 1
+                            },
+                            scale: {
+                                x: 1,
+                                y: 1,
+                                z: 1
+                            }
                         }
                     },
                 },
