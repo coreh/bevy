@@ -147,8 +147,13 @@
                 body: request,
             });
             const json = JSON.parse(await res.text(), (key, value) => {
-                if (value.JSON) {
-                    return JSON.parse(value.JSON)[key];
+                if (value?.JSON) {
+                    let nestedValue = JSON.parse(value.JSON);
+                    if (typeof nestedValue === 'object') {
+                        const firstKey = Object.keys(nestedValue)[0];
+                        return nestedValue[firstKey];
+                    }
+                    return nestedValue;
                 }
                 return value;
             });

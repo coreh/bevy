@@ -378,20 +378,52 @@ fn process_brp_query_request(
                 remote_cache.component_by_name(&component_name.0)
             );
 
-            let output = try_for_component!(
+            result.components.insert(
+                component_name.clone(),
+                try_for_component!(
+                    id,
+                    &component_name.0,
+                    serialize_component(&entity, &*type_registry_arc.read(), &component, session)
+                ),
+            );
+        }
+
+        for component_name in &data.optional {
+            let component = try_for_component!(
                 id,
                 &component_name.0,
-                serialize_component(&entity, &*type_registry_arc.read(), &component, session)
+                remote_cache.component_by_name(&component_name.0)
             );
 
-            if component.type_id().is_none() {
-                return BrpResponse::from_error(
-                    id,
-                    BrpError::ComponentMissingTypeId(component_name.0.clone()),
-                );
-            };
+            result.optional.insert(
+                component_name.clone(),
+                if entity.contains_id(component.id()) {
+                    Some(try_for_component!(
+                        id,
+                        &component_name.0,
+                        serialize_component(
+                            &entity,
+                            &*type_registry_arc.read(),
+                            &component,
+                            session
+                        )
+                    ))
+                } else {
+                    None
+                },
+            );
+        }
 
-            result.components.insert(component_name.clone(), output);
+        for component_name in &data.has {
+            let component = try_for_component!(
+                id,
+                &component_name.0,
+                remote_cache.component_by_name(&component_name.0)
+            );
+
+            result
+                .has
+                .insert(component_name.clone(), entity.contains_id(component.id()));
         }
 
         results.push(result);
