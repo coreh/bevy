@@ -137,12 +137,12 @@
     </section>
 
     <script>
-        document.querySelector("#send").addEventListener("click", async () => {
-            const request = document.querySelector("#request").value;
-            const res = await fetch("/brp", {
-                method: "POST",
+        document.querySelector('#send').addEventListener('click', async () => {
+            const request = document.querySelector('#request').value;
+            const res = await fetch('/brp', {
+                method: 'POST',
                 headers: {
-                    "Content-Type": "application/json",
+                    'Content-Type': 'application/json',
                 },
                 body: request,
             });
@@ -152,86 +152,78 @@
                 }
                 return value;
             });
-            document.querySelector("#result").value = JSON.stringify(json, null, 2);
 
+            const resultTextarea = document.querySelector('#result');
+            resultTextarea.value = JSON.stringify(json, null, 2);
             if (res.status >= 500) {
-                document.querySelector("#result").style.color = "var(--ui-error)";
+                resultTextarea.style.color = 'var(--ui-error)';
             } else if (res.status >= 400) {
-                document.querySelector("#result").style.color = "var(--ui-warning)";
+                resultTextarea.style.color = 'var(--ui-warning)';
             } else {
-                document.querySelector("#result").style.color = "var(--ui-success)";
+                resultTextarea.style.color = 'var(--ui-success)';
             }
         });
 
-        document.querySelector("select").addEventListener("change", (e) => {
-            const value = e.target.value;
-            let json;
-            if (value === "ping") {
-                json = {
-                    request: "PING",
-                };
-            } else if (value === "all-entities") {
-                json = {
-                    request: "QUERY",
-                    params: {},
-                };
-            } else if (value === "point-lights") {
-                json = {
-                    request: "QUERY",
-                    params: {
-                        data: {
-                            components: ["bevy_pbr::light::PointLight"],
-                        }
+        const EXAMPLES = {
+            'ping': {
+                request: 'PING',
+            },
+            'all-entities': {
+                request: 'QUERY',
+                params: {},
+            },
+            'point-lights': {
+                request: 'QUERY',
+                params: {
+                    data: {
+                        components: ['bevy_pbr::light::PointLight'],
                     },
-                };
-            } else if (value === "ui-text") {
-                json = {
-                    request: "QUERY",
-                    params: {
-                        data: {
-                            components: ["bevy_text::text::Text"],
-                        },
-                        filter: {
-                            with: ["bevy_ui::ui_node::Node"]
-                        }
+                },
+            },
+            'ui-text': {
+                request: 'QUERY',
+                params: {
+                    data: {
+                        components: ['bevy_text::text::Text'],
                     },
-                };
-            } else if (value === "non-ui") {
-                json = {
-                    request: "QUERY",
-                    params: {
-                        filter: {
-                            without: ["bevy_ui::ui_node::Node"]
-                        }
+                    filter: {
+                        with: ['bevy_ui::ui_node::Node'],
                     },
-                };
-            } else if (value === "root-entities") {
-                json = {
-                    request: "QUERY",
-                    params: {
-                        filter: {
-                            without: ["bevy_hierarchy::components::parent::Parent"]
-                        }
+                },
+            },
+            'non-ui': {
+                request: 'QUERY',
+                params: {
+                    filter: {
+                        without: ['bevy_ui::ui_node::Node'],
                     },
-                };
-            } else if (value === "invalid") {
-                json = {
-                    request: "FOO",
-                };
-            } else if (value === "unimplemented") {
-                json = {
-                    request: "POLL",
-                    params: {
-                        data: {
-                            components: ["bevy_pbr::light::PointLight"],
-                        }
+                },
+            },
+            'root-entities': {
+                request: 'QUERY',
+                params: {
+                    filter: {
+                        without: ['bevy_hierarchy::components::parent::Parent'],
                     },
-                };
-            } else {
-                json = {};
-            }
+                },
+            },
+            'invalid': {
+                request: 'FOO',
+            },
+            'unimplemented': {
+                request: 'POLL',
+                params: {
+                    data: {
+                        components: ['bevy_pbr::light::PointLight'],
+                    },
+                },
+            },
+        };
 
-            document.querySelector("#request").value = JSON.stringify(json, null, 2);
+        document.querySelector('select').addEventListener('change', (e) => {
+            const value = e.target.value;
+            const json = EXAMPLES[value] || {};
+            document.querySelector('#request').value = JSON.stringify(json, null, 2);
         });
 
     </script>
