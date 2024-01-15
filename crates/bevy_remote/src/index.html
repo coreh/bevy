@@ -181,7 +181,7 @@
                 request: 'QUERY',
                 params: {
                     data: {
-                        components: ['bevy_pbr::light::PointLight'],
+                        components: ['PointLight'],
                     },
                 },
             },
@@ -189,10 +189,10 @@
                 request: 'QUERY',
                 params: {
                     data: {
-                        components: ['bevy_text::text::Text'],
+                        components: ['Text'],
                     },
                     filter: {
-                        with: ['bevy_ui::ui_node::Node'],
+                        with: ['Node'],
                     },
                 },
             },
@@ -200,7 +200,7 @@
                 request: 'QUERY',
                 params: {
                     filter: {
-                        without: ['bevy_ui::ui_node::Node'],
+                        without: ['Node'],
                     },
                 },
             },
@@ -208,7 +208,7 @@
                 request: 'QUERY',
                 params: {
                     filter: {
-                        without: ['bevy_hierarchy::components::parent::Parent'],
+                        without: ['Parent'],
                     },
                 },
             },
@@ -219,7 +219,7 @@
                 request: 'POLL',
                 params: {
                     data: {
-                        components: ['bevy_pbr::light::PointLight'],
+                        components: ['PointLight'],
                     },
                 },
             },
