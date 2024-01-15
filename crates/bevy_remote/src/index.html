@@ -117,8 +117,6 @@
         <label for="request">Request</label>
         <div class="select-wrapper">
             <select>
-                <option>Choose an Example</option>
-                <hr>
                 <option value="ping">Ping</option>
                 <hr>
                 <option value="query-all-entities">Query: All Entities</option>
@@ -244,11 +242,15 @@
             },
         };
 
-        document.querySelector('select').addEventListener('change', (e) => {
+        document.querySelector('select').addEventListener('change', handleSelectChange);
+
+        function handleSelectChange(e) {
             const value = e.target.value;
             const json = EXAMPLES[value] || {};
             document.querySelector('#request').value = JSON.stringify(json, null, 2);
-        });
+        }
+
+        document.querySelector('select').dispatchEvent(new Event('change'));
 
     </script>
 
