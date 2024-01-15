@@ -87,10 +87,10 @@ impl<'de> Deserialize<'de> for BrpEntity {
             .map_err(|_| serde::de::Error::custom(INVALID_ENTITY_SERIALIZATION))?;
 
         #[cfg(target_endian = "little")]
-        let bits = (index as u64) << 32 | generation as u64;
+        let bits = (generation as u64) << 32 | index as u64;
 
         #[cfg(target_endian = "big")]
-        let bits = (generation as u64) << 32 | index as u64;
+        let bits = (index as u64) << 32 | generation as u64;
 
         Ok(Self(Entity::from_bits(bits)))
     }
