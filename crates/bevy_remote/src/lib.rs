@@ -143,7 +143,7 @@ pub enum RemoteComponentError {
     MissingTypeRegistration,
     MissingReflect,
     InvalidAccess,
-    Deerialization,
+    Deserialization,
 }
 
 macro_rules! try_for_component {
@@ -570,7 +570,7 @@ fn deserialize_component(
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
-                    return Err(RemoteComponentError::InvalidSerialization);
+                    return Err(RemoteComponentError::Deserialization);
                 }
             }
         }
@@ -582,7 +582,7 @@ fn deserialize_component(
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
-                    return Err(RemoteComponentError::InvalidSerialization);
+                    return Err(RemoteComponentError::Deserialization);
                 }
             }
         }
