@@ -144,6 +144,7 @@
     <script>
         document.querySelector('#send').addEventListener('click', async () => {
             let request = document.querySelector('#request').value;
+            const resultTextarea = document.querySelector('#result');
             try {
                 const requestJSON = JSON.parse(request);
                 request = JSON.stringify(requestJSON, function (key, value) {
@@ -159,33 +160,37 @@
             } catch (e) {
                 reportError(e);
             }
-            const res = await fetch('/brp', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: request,
-            });
-            const json = JSON.parse(await res.text(), (key, value) => {
-                if (value?.JSON) {
-                    let nestedValue = JSON.parse(value.JSON);
-                    if (typeof nestedValue === 'object') {
-                        const firstKey = Object.keys(nestedValue)[0];
-                        return nestedValue[firstKey];
+            try {
+                const res = await fetch('/brp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: request,
+                });
+                const json = JSON.parse(await res.text(), (key, value) => {
+                    if (value?.JSON) {
+                        let nestedValue = JSON.parse(value.JSON);
+                        if (typeof nestedValue === 'object') {
+                            const firstKey = Object.keys(nestedValue)[0];
+                            return nestedValue[firstKey];
+                        }
+                        return nestedValue;
                     }
-                    return nestedValue;
-                }
-                return value;
-            });
+                    return value;
+                });
 
-            const resultTextarea = document.querySelector('#result');
-            resultTextarea.value = JSON.stringify(json, null, 2);
-            if (res.status >= 500) {
+                resultTextarea.value = JSON.stringify(json, null, 2);
+                if (res.status >= 500) {
+                    resultTextarea.style.color = 'var(--ui-error)';
+                } else if (res.status >= 400) {
+                    resultTextarea.style.color = 'var(--ui-warning)';
+                } else {
+                    resultTextarea.style.color = 'var(--ui-success)';
+                }
+            } catch (e) {
+                resultTextarea.value = 'Error: ' + e.message;
                 resultTextarea.style.color = 'var(--ui-error)';
-            } else if (res.status >= 400) {
-                resultTextarea.style.color = 'var(--ui-warning)';
-            } else {
-                resultTextarea.style.color = 'var(--ui-success)';
             }
         });
 
