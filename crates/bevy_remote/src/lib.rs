@@ -260,39 +260,39 @@ fn process_brp_query_request(
             .chain(filter.with.iter())
             .chain(filter.without.iter())
             .chain(filter.when.iter())
-            .map(|component_name| component_name.0.as_str()),
+            .map(|component_name| component_name.as_str()),
     );
 
     let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
 
     for component_name in &data.components {
-        builder.ref_id(remote_cache.component_by_name(&component_name.0)?.id());
+        builder.ref_id(remote_cache.component_by_name(&component_name)?.id());
     }
 
     for component_name in &data.optional {
-        let component = remote_cache.component_by_name(&component_name.0)?;
+        let component = remote_cache.component_by_name(&component_name)?;
         builder.optional(|query| {
             query.ref_id(component.id());
         });
     }
 
     for component_name in &data.has {
-        let component = remote_cache.component_by_name(&component_name.0)?;
+        let component = remote_cache.component_by_name(&component_name)?;
         builder.optional(|query| {
             query.ref_id(component.id());
         });
     }
 
     for component_name in &filter.with {
-        builder.with_id(remote_cache.component_by_name(&component_name.0)?.id());
+        builder.with_id(remote_cache.component_by_name(&component_name)?.id());
     }
 
     for component_name in &filter.without {
-        builder.without_id(remote_cache.component_by_name(&component_name.0)?.id());
+        builder.without_id(remote_cache.component_by_name(&component_name)?.id());
     }
 
     for component_name in filter.when.iter() {
-        let component = remote_cache.component_by_name(&component_name.0)?;
+        let component = remote_cache.component_by_name(&component_name)?;
         builder.optional(|query| {
             query.ref_id(component.id());
         });
@@ -325,7 +325,7 @@ fn process_brp_query_request(
         };
 
         for component_name in &data.components {
-            let component = remote_cache.component_by_name(&component_name.0)?;
+            let component = remote_cache.component_by_name(&component_name)?;
 
             result.components.insert(
                 component_name.clone(),
@@ -334,7 +334,7 @@ fn process_brp_query_request(
         }
 
         for component_name in &data.optional {
-            let component = remote_cache.component_by_name(&component_name.0)?;
+            let component = remote_cache.component_by_name(&component_name)?;
 
             result.optional.insert(
                 component_name.clone(),
@@ -352,7 +352,7 @@ fn process_brp_query_request(
         }
 
         for component_name in &data.has {
-            let component = remote_cache.component_by_name(&component_name.0)?;
+            let component = remote_cache.component_by_name(&component_name)?;
 
             result
                 .has
@@ -422,7 +422,7 @@ fn process_brp_predicate(
         )?),
         BrpPredicate::Eq(components) => {
             for (component_name, component_value) in components.iter() {
-                let component = remote_cache.component_by_name(&component_name.0)?;
+                let component = remote_cache.component_by_name(&component_name)?;
 
                 if !partial_eq_component(
                     entity,
@@ -453,7 +453,7 @@ fn process_brp_insert_request(
         world,
         components
             .keys()
-            .map(|component_name| component_name.0.as_str()),
+            .map(|component_name| component_name.as_str()),
     );
 
     let Some(mut entity) = world.get_entity_mut(*entity) else {
@@ -464,7 +464,7 @@ fn process_brp_insert_request(
 
     for (component_name, component) in components.iter() {
         debug!("Trying to find component {:?}", component_name);
-        let component_info = remote_cache.component_by_name(&component_name.0)?;
+        let component_info = remote_cache.component_by_name(&component_name)?;
         debug!("Found component {:?}", component_info);
 
         deserialize_component(

@@ -59,8 +59,7 @@ pub type BrpId = u64;
 
 pub type BrpWatermark = u64;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone)]
-pub struct BrpComponentName(pub String);
+pub type BrpComponentName = String;
 
 pub type BrpComponentMap = HashMap<BrpComponentName, BrpComponent>;
 pub type BrpComponentOptionalMap = HashMap<BrpComponentName, Option<BrpComponent>>;
