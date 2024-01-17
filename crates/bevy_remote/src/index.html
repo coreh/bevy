@@ -126,6 +126,7 @@
                 <option value="query-root-entities">Query: Root Entities</option>
                 <option value="query-has-mesh">Query: Has Mesh?</option>
                 <option value="query-optional-names">Query: Optional Names</option>
+                <option value="query-when">Query: When</option>
                 <hr>
                 <option value="insert-point-light">Insert: Point Light</option>
                 <option value="insert-transform">Insert: Cube Transform</option>
@@ -146,7 +147,7 @@
             try {
                 const requestJSON = JSON.parse(request);
                 request = JSON.stringify(requestJSON, function (key, value) {
-                    if (key === 'components' && typeof value === 'object' && !Array.isArray(value)) {
+                    if (['components', '=='].includes(key) && typeof value === 'object' && !Array.isArray(value)) {
                         const result = {};
                         for (const [childKey, childValue] of Object.entries(value)) {
                             result[childKey] = { JSON: JSON.stringify(childValue) };
@@ -244,6 +245,20 @@
                 params: {
                     data: {
                         optional: ['Name'],
+                    },
+                },
+            },
+            'query-when': {
+                request: 'QUERY',
+                params: {
+                    filter: {
+                        when: {
+                            '==': {
+                                'Parent': {
+                                    'entity': [5]
+                                }
+                            }
+                        }
                     },
                 },
             },

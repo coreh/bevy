@@ -91,6 +91,22 @@ pub struct BrpQueryFilter {
     pub with: BrpComponentNames,
     #[serde(default)]
     pub without: BrpComponentNames,
+    #[serde(default)]
+    pub when: BrpPredicate,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub enum BrpPredicate {
+    #[default]
+    Always,
+    #[serde(rename = "&&")]
+    And(Vec<BrpPredicate>),
+    #[serde(rename = "||")]
+    Or(Vec<BrpPredicate>),
+    #[serde(rename = "!")]
+    Not(Box<BrpPredicate>),
+    #[serde(rename = "==")]
+    Eq(BrpComponentMap),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -145,6 +161,7 @@ pub enum BrpError {
     ComponentMissingTypeId(String),
     ComponentMissingTypeRegistration(String),
     ComponentMissingReflect(String),
+    ComponentMissingPartialEq(String),
     ComponentInvalidAccess(String),
     ComponentDeserialization(String),
     InvalidRequest,
