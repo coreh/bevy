@@ -291,6 +291,13 @@ fn process_brp_query_request(
         builder.without_id(remote_cache.component_by_name(&component_name.0)?.id());
     }
 
+    for component_name in filter.when.iter() {
+        let component = remote_cache.component_by_name(&component_name.0)?;
+        builder.optional(|query| {
+            query.ref_id(component.id());
+        });
+    }
+
     let mut query = builder.build();
 
     let mut results = BrpQueryResults::default();
