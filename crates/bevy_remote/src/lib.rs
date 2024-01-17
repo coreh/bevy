@@ -329,7 +329,7 @@ fn process_brp_query_request(
 
             result.components.insert(
                 component_name.clone(),
-                serialize_component(&entity, &type_registry, &component, session)?,
+                serialize_component(&entity, &type_registry, component_name, &component, session)?,
             );
         }
 
@@ -342,6 +342,7 @@ fn process_brp_query_request(
                     Some(serialize_component(
                         &entity,
                         &type_registry,
+                        component_name,
                         &component,
                         session,
                     )?)
@@ -427,6 +428,7 @@ fn process_brp_predicate(
                 if !partial_eq_component(
                     entity,
                     &type_registry,
+                    component_name,
                     &component,
                     component_value,
                     session,
@@ -470,6 +472,7 @@ fn process_brp_insert_request(
         deserialize_component(
             &mut entity,
             &type_registry,
+            component_name,
             &component_info,
             component,
             session,
@@ -482,30 +485,25 @@ fn process_brp_insert_request(
 fn serialize_component(
     entity: &FilteredEntityRef<'_>,
     type_registry: &TypeRegistry,
+    component_name: &BrpComponentName,
     component: &ComponentInfo,
     session: &RemoteSession,
 ) -> Result<BrpComponent, BrpError> {
     let component_id = component.id();
     let Some(type_id) = component.type_id() else {
-        return Err(BrpError::ComponentMissingTypeId(
-            component.name().to_string(),
-        ));
+        return Err(BrpError::ComponentMissingTypeId(component_name.clone()));
     };
     let type_registration = type_registry.get(type_id);
     let Some(type_registration) = type_registration else {
         return Err(BrpError::ComponentMissingTypeRegistration(
-            component.name().to_string(),
+            component_name.clone(),
         ));
     };
     let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
-        return Err(BrpError::ComponentMissingReflect(
-            component.name().to_string(),
-        ));
+        return Err(BrpError::ComponentMissingReflect(component_name.clone()));
     };
     let Some(component_ptr) = entity.get_by_id(component_id) else {
-        return Err(BrpError::ComponentInvalidAccess(
-            component.name().to_string(),
-        ));
+        return Err(BrpError::ComponentInvalidAccess(component_name.clone()));
     };
 
     // SAFETY: We got the `ComponentId` and `TypeId` from the same `ComponentInfo` so the
@@ -534,26 +532,23 @@ fn serialize_component(
 fn deserialize_component(
     entity: &mut EntityWorldMut<'_>,
     type_registry: &TypeRegistry,
+    component_name: &BrpComponentName,
     component: &ComponentInfo,
     input: &BrpComponent,
     session: &RemoteSession,
 ) -> Result<(), BrpError> {
     let component_id = component.id();
     let Some(type_id) = component.type_id() else {
-        return Err(BrpError::ComponentMissingTypeId(
-            component.name().to_string(),
-        ));
+        return Err(BrpError::ComponentMissingTypeId(component_name.clone()));
     };
     let type_registration = type_registry.get(type_id);
     let Some(type_registration) = type_registration else {
         return Err(BrpError::ComponentMissingTypeRegistration(
-            component.name().to_string(),
+            component_name.clone(),
         ));
     };
     let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
-        return Err(BrpError::ComponentMissingReflect(
-            component.name().to_string(),
-        ));
+        return Err(BrpError::ComponentMissingReflect(component_name.clone()));
     };
 
     let reflect_deserializer = TypedReflectDeserializer::new(&type_registration, &type_registry);
@@ -566,9 +561,7 @@ fn deserialize_component(
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
-                    return Err(BrpError::ComponentDeserialization(
-                        component.name().to_string(),
-                    ));
+                    return Err(BrpError::ComponentDeserialization(component_name.clone()));
                 }
             }
         }
@@ -580,9 +573,7 @@ fn deserialize_component(
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
-                    return Err(BrpError::ComponentDeserialization(
-                        component.name().to_string(),
-                    ));
+                    return Err(BrpError::ComponentDeserialization(component_name.clone()));
                 }
             }
         }
@@ -606,26 +597,23 @@ fn deserialize_component(
 fn partial_eq_component(
     entity: &FilteredEntityRef<'_>,
     type_registry: &TypeRegistry,
+    component_name: &BrpComponentName,
     component: &ComponentInfo,
     input: &BrpComponent,
     session: &RemoteSession,
 ) -> Result<bool, BrpError> {
     let component_id = component.id();
     let Some(type_id) = component.type_id() else {
-        return Err(BrpError::ComponentMissingTypeId(
-            component.name().to_string(),
-        ));
+        return Err(BrpError::ComponentMissingTypeId(component_name.clone()));
     };
     let type_registration = type_registry.get(type_id);
     let Some(type_registration) = type_registration else {
         return Err(BrpError::ComponentMissingTypeRegistration(
-            component.name().to_string(),
+            component_name.clone(),
         ));
     };
     let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
-        return Err(BrpError::ComponentMissingReflect(
-            component.name().to_string(),
-        ));
+        return Err(BrpError::ComponentMissingReflect(component_name.clone()));
     };
 
     let reflect_deserializer = TypedReflectDeserializer::new(&type_registration, &type_registry);
@@ -638,9 +626,7 @@ fn partial_eq_component(
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
-                    return Err(BrpError::ComponentDeserialization(
-                        component.name().to_string(),
-                    ));
+                    return Err(BrpError::ComponentDeserialization(component_name.clone()));
                 }
             }
         }
@@ -652,9 +638,7 @@ fn partial_eq_component(
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
-                    return Err(BrpError::ComponentDeserialization(
-                        component.name().to_string(),
-                    ));
+                    return Err(BrpError::ComponentDeserialization(component_name.clone()));
                 }
             }
         }
