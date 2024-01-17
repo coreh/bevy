@@ -146,7 +146,7 @@
             try {
                 const requestJSON = JSON.parse(request);
                 request = JSON.stringify(requestJSON, function (key, value) {
-                    if (key === 'components' && typeof value === 'object') {
+                    if (key === 'components' && typeof value === 'object' && !Array.isArray(value)) {
                         const result = {};
                         for (const [childKey, childValue] of Object.entries(value)) {
                             result[childKey] = { JSON: JSON.stringify(childValue) };
@@ -155,7 +155,6 @@
                     }
                     return value;
                 }, 2);
-                console.log(request);
             } catch (e) {
                 reportError(e);
             }
