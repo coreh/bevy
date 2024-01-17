@@ -17,7 +17,7 @@ pub struct BrpRequest {
 pub enum BrpRequestContent {
     Ping,
     Get {
-        entity: BrpEntity,
+        entity: Entity,
         components: BrpComponentNames,
     },
     Query {
@@ -30,19 +30,19 @@ pub enum BrpRequestContent {
         components: BrpComponentMap,
     },
     Destroy {
-        entity: BrpEntity,
+        entity: Entity,
     },
     Insert {
-        entity: BrpEntity,
+        entity: Entity,
         components: BrpComponentMap,
     },
     Remove {
-        entity: BrpEntity,
+        entity: Entity,
         components: BrpComponentNames,
     },
     Reparent {
-        entity: BrpEntity,
-        parent: BrpEntity,
+        entity: Entity,
+        parent: Entity,
     },
     Poll {
         #[serde(default)]
@@ -58,43 +58,6 @@ pub type BrpComponentNames = Vec<BrpComponentName>;
 pub type BrpId = u64;
 
 pub type BrpWatermark = u64;
-
-#[derive(Debug)]
-pub struct BrpEntity(pub Entity);
-
-impl Serialize for BrpEntity {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let index = self.0.index();
-        let generation = self.0.generation();
-        let serialization = format!("{}v{}", index, generation);
-        serializer.serialize_str(serialization.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for BrpEntity {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        const INVALID_ENTITY_SERIALIZATION: &str = "Invalid entity serialization";
-
-        let deserialized = String::deserialize(deserializer)?;
-        let (index, generation) = deserialized
-            .split_once("v")
-            .ok_or_else(|| serde::de::Error::custom(INVALID_ENTITY_SERIALIZATION))?;
-        let index = index
-            .parse::<u32>()
-            .map_err(|_| serde::de::Error::custom(INVALID_ENTITY_SERIALIZATION))?;
-        let generation = generation
-            .parse::<u32>()
-            .map_err(|_| serde::de::Error::custom(INVALID_ENTITY_SERIALIZATION))?;
-
-        #[cfg(target_endian = "little")]
-        let bits = (generation as u64) << 32 | index as u64;
-
-        #[cfg(target_endian = "big")]
-        let bits = (index as u64) << 32 | generation as u64;
-
-        Ok(Self(Entity::from_bits(bits)))
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone)]
 pub struct BrpComponentName(pub String);
@@ -146,14 +109,14 @@ pub enum BrpResponseContent {
     Ok,
     Error(BrpError),
     Get {
-        entity: BrpEntity,
+        entity: Entity,
         components: BrpComponentMap,
     },
     Query {
         entities: BrpQueryResults,
     },
     Spawn {
-        entity: BrpEntity,
+        entity: Entity,
     },
     Poll {
         entities: BrpQueryResults,
@@ -163,7 +126,7 @@ pub enum BrpResponseContent {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BrpQueryResult {
-    pub entity: BrpEntity,
+    pub entity: Entity,
     #[serde(default)]
     pub components: BrpComponentMap,
     #[serde(default)]

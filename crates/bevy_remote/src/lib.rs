@@ -387,7 +387,7 @@ fn process_brp_query_request(
 
     for entity in query.iter(world) {
         let mut result = BrpQueryResult {
-            entity: BrpEntity(entity.id()),
+            entity: entity.id(),
             components: HashMap::new(),
             optional: HashMap::new(),
             has: HashMap::new(),
@@ -453,7 +453,7 @@ fn process_brp_insert_request(
     world: &mut World,
     session: &RemoteSession,
     id: BrpId,
-    entity: &BrpEntity,
+    entity: &Entity,
     components: &HashMap<BrpComponentName, BrpComponent>,
 ) -> BrpResponse {
     let remote_cache = world.resource::<RemoteCache>().clone();
@@ -466,7 +466,7 @@ fn process_brp_insert_request(
             .map(|component_name| component_name.0.as_str()),
     );
 
-    let Some(mut entity) = world.get_entity_mut(entity.0) else {
+    let Some(mut entity) = world.get_entity_mut(*entity) else {
         return BrpResponse::from_error(id, BrpError::EntityNotFound);
     };
 
