@@ -380,7 +380,7 @@ fn process_brp_predicate(
 ) -> Result<bool, BrpError> {
     match predicate {
         BrpPredicate::Always => Ok(true),
-        BrpPredicate::And(predicates) => {
+        BrpPredicate::All(predicates) => {
             for predicate in predicates.iter() {
                 if !process_brp_predicate(
                     world,
@@ -396,7 +396,7 @@ fn process_brp_predicate(
             }
             Ok(true)
         }
-        BrpPredicate::Or(predicates) => {
+        BrpPredicate::Any(predicates) => {
             for predicate in predicates.iter() {
                 if process_brp_predicate(
                     world,
@@ -421,7 +421,7 @@ fn process_brp_predicate(
             remote_cache,
             predicate,
         )?),
-        BrpPredicate::Eq(components) => {
+        BrpPredicate::PartialEq(components) => {
             for (component_name, component_value) in components.iter() {
                 let component = remote_cache.component_by_name(&component_name)?;
 

@@ -99,13 +99,13 @@ pub enum BrpPredicate {
     #[default]
     Always,
     #[serde(rename = "&&")]
-    And(Vec<BrpPredicate>),
+    All(Vec<BrpPredicate>),
     #[serde(rename = "||")]
-    Or(Vec<BrpPredicate>),
+    Any(Vec<BrpPredicate>),
     #[serde(rename = "!")]
     Not(Box<BrpPredicate>),
     #[serde(rename = "==")]
-    Eq(BrpComponentMap),
+    PartialEq(BrpComponentMap),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -190,10 +190,10 @@ impl BrpPredicate {
     pub fn iter(&self) -> Box<dyn Iterator<Item = &BrpComponentName> + '_> {
         match self {
             BrpPredicate::Always => Box::from(std::iter::empty()),
-            BrpPredicate::And(predicates) => Box::from(predicates.iter().flat_map(|p| p.iter())),
-            BrpPredicate::Or(predicates) => Box::from(predicates.iter().flat_map(|p| p.iter())),
+            BrpPredicate::All(predicates) => Box::from(predicates.iter().flat_map(|p| p.iter())),
+            BrpPredicate::Any(predicates) => Box::from(predicates.iter().flat_map(|p| p.iter())),
             BrpPredicate::Not(predicate) => Box::from(predicate.iter()),
-            BrpPredicate::Eq(components) => Box::from(components.keys()),
+            BrpPredicate::PartialEq(components) => Box::from(components.keys()),
         }
     }
 }
