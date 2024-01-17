@@ -5,14 +5,14 @@ use std::{
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
 use bevy_ecs::{
-    component::ComponentInfo,
+    component::{ComponentId, ComponentInfo},
     entity::Entity,
-    ptr::OwningPtr,
+    ptr::{OwningPtr, Ptr},
     query::QueryBuilder,
     reflect::AppTypeRegistry,
     schedule::ScheduleLabel,
     system::Resource,
-    world::{EntityWorldMut, FilteredEntityRef, World},
+    world::{EntityRef, EntityWorldMut, FilteredEntityRef, World},
 };
 use bevy_log::{debug, warn};
 use bevy_reflect::{
@@ -265,8 +265,12 @@ fn process_brp_query_request(
 
     let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
 
-    for component_name in &data.components {
-        builder.ref_id(remote_cache.component_by_name(&component_name)?.id());
+    let fetch_all_components = data.components.len() == 1 && data.components[0] == "*";
+
+    if !fetch_all_components {
+        for component_name in &data.components {
+            builder.ref_id(remote_cache.component_by_name(&component_name)?.id());
+        }
     }
 
     for component_name in &data.optional {
@@ -324,13 +328,21 @@ fn process_brp_query_request(
             has: HashMap::new(),
         };
 
-        for component_name in &data.components {
-            let component = remote_cache.component_by_name(&component_name)?;
+        if !fetch_all_components {
+            for component_name in &data.components {
+                let component = remote_cache.component_by_name(&component_name)?;
 
-            result.components.insert(
-                component_name.clone(),
-                serialize_component(&entity, &type_registry, component_name, &component, session)?,
-            );
+                result.components.insert(
+                    component_name.clone(),
+                    serialize_component(
+                        &AnyEntityRef::FilteredEntityRef(&entity),
+                        &type_registry,
+                        component_name,
+                        &component,
+                        session,
+                    )?,
+                );
+            }
         }
 
         for component_name in &data.optional {
@@ -340,7 +352,7 @@ fn process_brp_query_request(
                 component_name.clone(),
                 if entity.contains_id(component.id()) {
                     Some(serialize_component(
-                        &entity,
+                        &AnyEntityRef::FilteredEntityRef(&entity),
                         &type_registry,
                         component_name,
                         &component,
@@ -361,6 +373,40 @@ fn process_brp_query_request(
         }
 
         results.push(result);
+    }
+
+    if fetch_all_components {
+        for result in &mut results {
+            let entity = world.entity(result.entity);
+            for component in world.components().iter() {
+                let component_id = component.id();
+                let component_name = component.name().to_string();
+                if entity.contains_id(component_id) {
+                    match serialize_component(
+                        &AnyEntityRef::EntityRef(&entity),
+                        &type_registry,
+                        &component_name,
+                        component,
+                        session,
+                    ) {
+                        Ok(serialized) => {
+                            result.components.insert(component_name, serialized);
+                        }
+                        Err(
+                            BrpError::ComponentMissingTypeRegistration(_)
+                            | BrpError::ComponentMissingReflect(_)
+                            | BrpError::ComponentMissingTypeId(_)
+                            | BrpError::ComponentSerialization(_),
+                        ) => {
+                            result
+                                .components
+                                .insert(component_name, BrpComponent::Unserializable);
+                        }
+                        Err(err) => return Err(err),
+                    }
+                }
+            }
+        }
     }
 
     Ok(BrpResponse::new(
@@ -482,8 +528,22 @@ fn process_brp_insert_request(
     Ok(BrpResponse::new(id, BrpResponseContent::Ok))
 }
 
+enum AnyEntityRef<'a> {
+    EntityRef(&'a EntityRef<'a>),
+    FilteredEntityRef(&'a FilteredEntityRef<'a>),
+}
+
+impl<'w> AnyEntityRef<'w> {
+    fn get_by_id(&self, id: ComponentId) -> Option<Ptr<'w>> {
+        match self {
+            AnyEntityRef::EntityRef(entity) => entity.get_by_id(id),
+            AnyEntityRef::FilteredEntityRef(entity) => entity.get_by_id(id),
+        }
+    }
+}
+
 fn serialize_component(
-    entity: &FilteredEntityRef<'_>,
+    entity: &AnyEntityRef<'_>,
     type_registry: &TypeRegistry,
     component_name: &BrpComponentName,
     component: &ComponentInfo,
@@ -517,12 +577,14 @@ fn serialize_component(
         let reflect = reflect_from_ptr.as_reflect(component_ptr);
         let serializer = ReflectSerializer::new(reflect, &type_registry);
         match session.component_format {
-            RemoteComponentFormat::Ron => {
-                BrpComponent::Ron(ron::ser::to_string(&serializer).unwrap())
-            }
-            RemoteComponentFormat::Json => {
-                BrpComponent::Json(serde_json::ser::to_string(&serializer).unwrap())
-            }
+            RemoteComponentFormat::Ron => BrpComponent::Ron(
+                ron::ser::to_string(&serializer)
+                    .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
+            ),
+            RemoteComponentFormat::Json => BrpComponent::Json(
+                serde_json::ser::to_string(&serializer)
+                    .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
+            ),
         }
     };
 
@@ -576,6 +638,9 @@ fn deserialize_component(
                     return Err(BrpError::ComponentDeserialization(component_name.clone()));
                 }
             }
+        }
+        BrpComponent::Unserializable => {
+            return Err(BrpError::ComponentDeserialization(component_name.clone()))
         }
     };
 
@@ -641,6 +706,9 @@ fn partial_eq_component(
                     return Err(BrpError::ComponentDeserialization(component_name.clone()));
                 }
             }
+        }
+        BrpComponent::Unserializable => {
+            return Err(BrpError::ComponentDeserialization(component_name.clone()))
         }
     };
 

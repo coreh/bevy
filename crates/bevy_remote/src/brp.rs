@@ -72,6 +72,9 @@ pub enum BrpComponent {
 
     #[serde(rename = "RON")]
     Ron(String),
+
+    #[serde(rename = "<<Unserializable>>")]
+    Unserializable,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -163,6 +166,7 @@ pub enum BrpError {
     ComponentMissingPartialEq(String),
     ComponentInvalidAccess(String),
     ComponentDeserialization(String),
+    ComponentSerialization(String),
     InvalidRequest,
     InvalidEntity,
     InvalidQuery,

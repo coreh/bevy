@@ -120,6 +120,7 @@
                 <option value="ping">Ping</option>
                 <hr>
                 <option value="query-all-entities">Query: All Entities</option>
+                <option value="query-all-components">Query: All Entities, All Components</option>
                 <option value="query-point-lights">Query: Point Lights</option>
                 <option value="query-ui-text">Query: UI Text</option>
                 <option value="query-non-ui">Query: Non-UI Entities</option>
@@ -201,6 +202,14 @@
             'query-all-entities': {
                 request: 'QUERY',
                 params: {},
+            },
+            'query-all-components': {
+                request: 'QUERY',
+                params: {
+                    data: {
+                        components: ['*'],
+                    },
+                },
             },
             'query-point-lights': {
                 request: 'QUERY',
