@@ -259,6 +259,7 @@ fn process_brp_query_request(
             .chain(data.has.iter())
             .chain(filter.with.iter())
             .chain(filter.without.iter())
+            .chain(filter.when.iter())
             .map(|component_name| component_name.0.as_str()),
     );
 
