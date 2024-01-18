@@ -53,78 +53,97 @@ impl Plugin for HttpRemotePlugin {
 
         // spawn the http thread
         std::thread::spawn(move || {
-            rouille::start_server("localhost:8765", move |request| {
-                if request.url() == "/" && request.method() == "GET" {
-                    return rouille::Response::html(include_str!("index.html"));
-                }
-
-                if request.url() != "/brp" {
-                    warn!("Invalid URL: {}", request.url());
-                    return rouille::Response::empty_404();
-                }
-
-                if request.method() != "POST" {
-                    warn!("Invalid HTTP method: {}", request.method());
-                    return BrpResponse::from_error(0, BrpError::InvalidRequest).into();
-                }
-
-                let Ok(mut brp_request) = BrpRequest::try_from(request) else {
-                    warn!("Invalid request: {:?}", request);
-                    return BrpResponse::from_error(0, BrpError::InvalidRequest).into();
-                };
-
-                // For HTTP, ignore the request id from the client and generate a new one
-                brp_request.id = request_id
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                    .into();
-
-                let now = std::time::Instant::now();
-
-                let id = brp_request.id;
-
-                debug!("Sending request to channel: {:?}", brp_request);
-
-                match request_sender.send(brp_request) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        warn!("Failed to send request to channel");
-                        return BrpResponse::from_error(id, BrpError::InternalError).into();
+            rouille::start_server(
+                "localhost:8765",
+                with_cors(move |request| {
+                    if request.url() == "/" && request.method() == "GET" {
+                        return rouille::Response::html(include_str!("index.html"));
                     }
-                };
 
-                let deadline = now + HTTP_REQUEST_TIMEOUT;
+                    if request.url() != "/brp" {
+                        warn!("Invalid URL: {}", request.url());
+                        return rouille::Response::empty_404();
+                    }
 
-                loop {
-                    match response_receiver.recv_deadline(deadline) {
-                        Ok(brp_response) => {
-                            debug!("Received response from channel: {:?}", brp_response);
-                            if brp_response.id == id {
-                                // The response is for this request
-                                return brp_response.into();
-                            } else {
-                                if now.elapsed() > HTTP_REQUEST_TIMEOUT {
+                    if request.method() != "POST" {
+                        warn!("Invalid HTTP method: {}", request.method());
+                        return BrpResponse::from_error(0, BrpError::InvalidRequest).into();
+                    }
+
+                    let Ok(mut brp_request) = BrpRequest::try_from(request) else {
+                        warn!("Invalid request: {:?}", request);
+                        return BrpResponse::from_error(0, BrpError::InvalidRequest).into();
+                    };
+
+                    // For HTTP, ignore the request id from the client and generate a new one
+                    brp_request.id = request_id
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                        .into();
+
+                    let now = std::time::Instant::now();
+
+                    let id = brp_request.id;
+
+                    debug!("Sending request to channel: {:?}", brp_request);
+
+                    match request_sender.send(brp_request) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            warn!("Failed to send request to channel");
+                            return BrpResponse::from_error(id, BrpError::InternalError).into();
+                        }
+                    };
+
+                    let deadline = now + HTTP_REQUEST_TIMEOUT;
+
+                    loop {
+                        match response_receiver.recv_deadline(deadline) {
+                            Ok(brp_response) => {
+                                debug!("Received response from channel: {:?}", brp_response);
+                                if brp_response.id == id {
+                                    // The response is for this request
+                                    return brp_response.into();
+                                } else {
+                                    if now.elapsed() > HTTP_REQUEST_TIMEOUT {
+                                        warn!("Request timed out");
+                                        return BrpResponse::from_error(id, BrpError::Timeout)
+                                            .into();
+                                    }
+
+                                    // The response is not for this request, so send it back to the loopback
+                                    // This is a hack to avoid having to implement a hashmap of request ids
+                                    debug!("Sending response to loopback: {:?}", brp_response);
+                                    response_loopback.send(brp_response).unwrap();
+                                }
+                            }
+                            Err(err) => {
+                                if err == crossbeam_channel::RecvTimeoutError::Timeout {
                                     warn!("Request timed out");
                                     return BrpResponse::from_error(id, BrpError::Timeout).into();
                                 }
 
-                                // The response is not for this request, so send it back to the loopback
-                                // This is a hack to avoid having to implement a hashmap of request ids
-                                debug!("Sending response to loopback: {:?}", brp_response);
-                                response_loopback.send(brp_response).unwrap();
+                                warn!("Failed to receive response from channel");
+                                return BrpResponse::from_error(id, BrpError::InternalError).into();
                             }
-                        }
-                        Err(err) => {
-                            if err == crossbeam_channel::RecvTimeoutError::Timeout {
-                                warn!("Request timed out");
-                                return BrpResponse::from_error(id, BrpError::Timeout).into();
-                            }
-
-                            warn!("Failed to receive response from channel");
-                            return BrpResponse::from_error(id, BrpError::InternalError).into();
                         }
                     }
-                }
-            });
+                }),
+            );
         });
+
+        fn with_cors(
+            handler: impl Fn(&rouille::Request) -> rouille::Response,
+        ) -> impl Fn(&rouille::Request) -> rouille::Response {
+            move |request| {
+                if request.method() == "OPTIONS" {
+                    rouille::Response::empty_204()
+                } else {
+                    handler(request)
+                }
+                .with_additional_header("Access-Control-Allow-Origin", "*")
+                .with_additional_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                .with_additional_header("Access-Control-Allow-Headers", "Content-Type")
+            }
+        }
     }
 }
