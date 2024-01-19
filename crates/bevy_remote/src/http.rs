@@ -5,7 +5,7 @@ use std::time::Duration;
 
 pub struct HttpRemotePlugin;
 
-const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
+const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_millis(5000);
 
 impl From<BrpResponse> for rouille::Response {
     fn from(brp_response: BrpResponse) -> Self {
