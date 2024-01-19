@@ -228,6 +228,11 @@ fn process_brp_request(
 ) -> Result<BrpResponse, BrpError> {
     match request.request {
         BrpRequestContent::Ping => Ok(BrpResponse::new(request.id, BrpResponseContent::Ok)),
+        BrpRequestContent::Get {
+            entity,
+            ref data,
+            ref filter,
+        } => process_brp_get_request(world, session, request.id, data, filter, entity),
         BrpRequestContent::Query {
             ref data,
             ref filter,
@@ -240,12 +245,54 @@ fn process_brp_request(
     }
 }
 
+fn process_brp_get_request(
+    world: &mut World,
+    session: &RemoteSession,
+    id: BrpId,
+    data: &BrpQueryData,
+    filter: &BrpQueryFilter,
+    entity: Entity,
+) -> Result<BrpResponse, BrpError> {
+    let query_response =
+        process_brp_get_or_query_request(world, session, id, data, filter, Some(entity));
+
+    match query_response {
+        Ok(BrpResponse {
+            response: BrpResponseContent::Query { mut entities },
+            ..
+        }) => {
+            if entities.len() != 1 {
+                return Err(BrpError::EntityNotFound);
+            }
+
+            Ok(BrpResponse::new(
+                id,
+                BrpResponseContent::Get {
+                    entity: entities.pop().unwrap(),
+                },
+            ))
+        }
+        other => other,
+    }
+}
+
 fn process_brp_query_request(
     world: &mut World,
     session: &RemoteSession,
     id: BrpId,
     data: &BrpQueryData,
     filter: &BrpQueryFilter,
+) -> Result<BrpResponse, BrpError> {
+    process_brp_get_or_query_request(world, session, id, data, filter, None)
+}
+
+fn process_brp_get_or_query_request(
+    world: &mut World,
+    session: &RemoteSession,
+    id: BrpId,
+    data: &BrpQueryData,
+    filter: &BrpQueryFilter,
+    entity: Option<Entity>,
 ) -> Result<BrpResponse, BrpError> {
     let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
 
@@ -308,7 +355,16 @@ fn process_brp_query_request(
 
     let type_registry = &*type_registry_arc.read();
 
-    for entity in query.iter(world) {
+    let (mut _1, mut _2);
+    let entities: &mut dyn Iterator<Item = FilteredEntityRef> = if let Some(entity) = entity {
+        _1 = query.get(world, entity).into_iter();
+        &mut _1
+    } else {
+        _2 = query.iter(world).into_iter();
+        &mut _2
+    };
+
+    for entity in entities {
         if !process_brp_predicate(
             world,
             session,
