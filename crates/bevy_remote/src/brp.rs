@@ -18,7 +18,10 @@ pub enum BrpRequestContent {
     Ping,
     Get {
         entity: Entity,
-        components: BrpComponentNames,
+        #[serde(default)]
+        data: BrpQueryData,
+        #[serde(default)]
+        filter: BrpQueryFilter,
     },
     Query {
         #[serde(default)]
@@ -127,8 +130,7 @@ pub enum BrpResponseContent {
     Ok,
     Error(BrpError),
     Get {
-        entity: Entity,
-        components: BrpComponentMap,
+        entity: BrpQueryResult,
     },
     Query {
         entities: BrpQueryResults,
