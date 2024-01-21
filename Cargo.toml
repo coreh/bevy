@@ -133,7 +133,7 @@ bevy_ui = [
 ]
 
 # Provides remote inspection functionality
-bevy_remote = ["bevy_internal/bevy_remote"]
+bevy_remote = ["serialize", "bevy_internal/bevy_remote"]
 
 # Provides remote inspection functionality over HTTP
 remote_http = ["bevy_remote", "bevy_internal/remote_http"]
