@@ -25,7 +25,7 @@ fn fragment(
     pbr_input.material.base_color = pbr_input.material.base_color * mesh.color;
 #endif
 
-    let double_sided = any((pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != vec2(0u, 0u));
+    let double_sided = any((pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != vec2(0u));
 
     pbr_input.frag_coord = mesh.position;
     pbr_input.world_position = mesh.world_position;

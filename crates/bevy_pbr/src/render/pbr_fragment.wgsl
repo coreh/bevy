@@ -62,7 +62,7 @@ fn pbr_input_from_standard_material(
     in: VertexOutput,
     is_front: bool,
 ) -> pbr_types::PbrInput {
-    let double_sided = any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != vec2(0u, 0u));
+    let double_sided = any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != vec2(0u));
 
     var pbr_input: pbr_types::PbrInput = pbr_input_from_vertex_output(in, is_front, double_sided);
     pbr_input.material.flags = pbr_bindings::material.flags;
@@ -76,7 +76,7 @@ fn pbr_input_from_standard_material(
     var uv = in.uv;
 
 #ifdef VERTEX_TANGENTS
-    if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_DEPTH_MAP_BIT) != vec2(0u, 0u)) {
+    if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_DEPTH_MAP_BIT) != vec2(0u)) {
         let V = pbr_input.V;
         let N = in.world_normal;
         let T = in.world_tangent.xyz;
@@ -96,7 +96,7 @@ fn pbr_input_from_standard_material(
     }
 #endif // VERTEX_TANGENTS
 
-    if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT) != vec2(0u, 0u)) {
+    if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT) != vec2(0u)) {
         pbr_input.material.base_color *= textureSampleBias(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, uv, view.mip_bias);
     }
 #endif // VERTEX_UVS
@@ -104,7 +104,7 @@ fn pbr_input_from_standard_material(
     pbr_input.material.flags = pbr_bindings::material.flags;
 
     // NOTE: Unlit bit not set means == 0 is true, so the true case is if lit
-    if all((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == vec2(0u, 0u)) {
+    if all((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == vec2(0u)) {
         pbr_input.material.reflectance = pbr_bindings::material.reflectance;
         pbr_input.material.ior = pbr_bindings::material.ior;
         pbr_input.material.attenuation_color = pbr_bindings::material.attenuation_color;
@@ -115,7 +115,7 @@ fn pbr_input_from_standard_material(
         // TODO use .a for exposure compensation in HDR
         var emissive: vec4<f32> = pbr_bindings::material.emissive;
 #ifdef VERTEX_UVS
-        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_EMISSIVE_TEXTURE_BIT) != vec2(0u, 0u)) {
+        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_EMISSIVE_TEXTURE_BIT) != vec2(0u)) {
             emissive = vec4<f32>(emissive.rgb * textureSampleBias(pbr_bindings::emissive_texture, pbr_bindings::emissive_sampler, uv, view.mip_bias).rgb, 1.0);
         }
 #endif
@@ -126,7 +126,7 @@ fn pbr_input_from_standard_material(
         var perceptual_roughness: f32 = pbr_bindings::material.perceptual_roughness;
         let roughness = lighting::perceptualRoughnessToRoughness(perceptual_roughness);
 #ifdef VERTEX_UVS
-        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_METALLIC_ROUGHNESS_TEXTURE_BIT) != vec2(0u, 0u)) {
+        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_METALLIC_ROUGHNESS_TEXTURE_BIT) != vec2(0u)) {
             let metallic_roughness = textureSampleBias(pbr_bindings::metallic_roughness_texture, pbr_bindings::metallic_roughness_sampler, uv, view.mip_bias);
             // Sampling from GLTF standard channels for now
             metallic *= metallic_roughness.b;
@@ -138,7 +138,7 @@ fn pbr_input_from_standard_material(
 
         var specular_transmission: f32 = pbr_bindings::material.specular_transmission;
 #ifdef PBR_TRANSMISSION_TEXTURES_SUPPORTED
-        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_SPECULAR_TRANSMISSION_TEXTURE_BIT) != vec2(0u, 0u)) {
+        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_SPECULAR_TRANSMISSION_TEXTURE_BIT) != vec2(0u)) {
             specular_transmission *= textureSample(pbr_bindings::specular_transmission_texture, pbr_bindings::specular_transmission_sampler, uv).r;
         }
 #endif
@@ -146,7 +146,7 @@ fn pbr_input_from_standard_material(
 
         var thickness: f32 = pbr_bindings::material.thickness;
 #ifdef PBR_TRANSMISSION_TEXTURES_SUPPORTED
-        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_THICKNESS_TEXTURE_BIT) != vec2(0u, 0u)) {
+        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_THICKNESS_TEXTURE_BIT) != vec2(0u)) {
             thickness *= textureSample(pbr_bindings::thickness_texture, pbr_bindings::thickness_sampler, uv).g;
         }
 #endif
@@ -158,7 +158,7 @@ fn pbr_input_from_standard_material(
 
         var diffuse_transmission = pbr_bindings::material.diffuse_transmission;
 #ifdef PBR_TRANSMISSION_TEXTURES_SUPPORTED
-        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_DIFFUSE_TRANSMISSION_TEXTURE_BIT) != vec2(0u, 0u)) {
+        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_DIFFUSE_TRANSMISSION_TEXTURE_BIT) != vec2(0u)) {
             diffuse_transmission *= textureSample(pbr_bindings::diffuse_transmission_texture, pbr_bindings::diffuse_transmission_sampler, uv).a;
         }
 #endif
@@ -167,7 +167,7 @@ fn pbr_input_from_standard_material(
         var diffuse_occlusion: vec3<f32> = vec3(1.0);
         var specular_occlusion: f32 = 1.0;
 #ifdef VERTEX_UVS
-        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_OCCLUSION_TEXTURE_BIT) != vec2(0u, 0u)) {
+        if any((pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_OCCLUSION_TEXTURE_BIT) != vec2(0u)) {
             diffuse_occlusion = vec3(textureSampleBias(pbr_bindings::occlusion_texture, pbr_bindings::occlusion_sampler, uv, view.mip_bias).r);
         }
 #endif
