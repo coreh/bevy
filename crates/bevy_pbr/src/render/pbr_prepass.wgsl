@@ -6,7 +6,7 @@
     prepass_io,
     mesh_view_bindings::view,
 }
- 
+
 #ifdef PREPASS_FRAGMENT
 @fragment
 fn fragment(
@@ -23,8 +23,8 @@ fn fragment(
 
 #ifdef NORMAL_PREPASS
     // NOTE: Unlit bit not set means == 0 is true, so the true case is if lit
-    if (material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == 0u {
-        let double_sided = (material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u;
+    if all((material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == vec2(0u, 0u)) {
+        let double_sided = any((material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != vec2(0u, 0u));
 
         let world_normal = pbr_functions::prepare_world_normal(
             in.world_normal,

@@ -1,5 +1,5 @@
 use bevy_asset::{Asset, Handle};
-use bevy_math::Vec4;
+use bevy_math::{UVec2, Vec4};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_render::{
     color::Color, mesh::MeshVertexBufferLayout, render_asset::RenderAssets, render_resource::*,
@@ -614,7 +614,7 @@ pub struct StandardMaterialUniform {
     /// Color white light takes after travelling through the attenuation distance underneath the material surface
     pub attenuation_color: Vec4,
     /// The [`StandardMaterialFlags`] accessible in the `wgsl` shader.
-    pub flags: u32,
+    pub flags: UVec2,
     /// When the alpha mode mask flag is set, any base color alpha above this cutoff means fully opaque,
     /// and any below means fully transparent.
     pub alpha_cutoff: f32,
@@ -722,7 +722,10 @@ impl AsBindGroupShaderType<StandardMaterialUniform> for StandardMaterial {
             ior: self.ior,
             attenuation_distance: self.attenuation_distance,
             attenuation_color: self.attenuation_color.as_linear_rgba_f32().into(),
-            flags: flags.bits(),
+            flags: {
+                let bits = flags.bits();
+                UVec2::new(bits >> 16, bits & 0xFFFF)
+            },
             alpha_cutoff,
             parallax_depth_scale: self.parallax_depth_scale,
             max_parallax_layer_count: self.max_parallax_layer_count,

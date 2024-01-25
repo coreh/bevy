@@ -23,7 +23,7 @@
 fn alpha_discard(material: pbr_types::StandardMaterial, output_color: vec4<f32>) -> vec4<f32> {
     var color = output_color;
     let alpha_mode = material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
-    if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_OPAQUE {
+    if all(alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_OPAQUE) {
         // NOTE: If rendering as opaque, alpha should be ignored so set to 1.0
         color.a = 1.0;
     }
@@ -60,7 +60,7 @@ fn prepare_world_normal(
 }
 
 fn apply_normal_mapping(
-    standard_material_flags: u32,
+    standard_material_flags: vec2<u32>,
     world_normal: vec3<f32>,
     double_sided: bool,
     is_front: bool,
@@ -98,7 +98,7 @@ fn apply_normal_mapping(
 #ifdef STANDARDMATERIAL_NORMAL_MAP
     // Nt is the tangent-space normal.
     var Nt = textureSampleBias(pbr_bindings::normal_map_texture, pbr_bindings::normal_map_sampler, uv, mip_bias).rgb;
-    if (standard_material_flags & pbr_types::STANDARD_MATERIAL_FLAGS_TWO_COMPONENT_NORMAL_MAP) != 0u {
+    if any((standard_material_flags & pbr_types::STANDARD_MATERIAL_FLAGS_TWO_COMPONENT_NORMAL_MAP) != vec2(0u, 0u)) {
         // Only use the xy components and derive z for 2-component normal maps.
         Nt = vec3<f32>(Nt.rg * 2.0 - 1.0, 0.0);
         Nt.z = sqrt(1.0 - Nt.x * Nt.x - Nt.y * Nt.y);
@@ -106,7 +106,7 @@ fn apply_normal_mapping(
         Nt = Nt * 2.0 - 1.0;
     }
     // Normal maps authored for DirectX require flipping the y component
-    if (standard_material_flags & pbr_types::STANDARD_MATERIAL_FLAGS_FLIP_NORMAL_MAP_Y) != 0u {
+    if any((standard_material_flags & pbr_types::STANDARD_MATERIAL_FLAGS_FLIP_NORMAL_MAP_Y) != vec2(0u, 0u)) {
         Nt.y = -Nt.y;
     }
 
@@ -387,7 +387,7 @@ fn apply_pbr_lighting(
         transmitted_light += transmission::specular_transmissive_light(in.world_position, in.frag_coord.xyz, view_z, in.N, in.V, F0, ior, thickness, perceptual_roughness, specular_transmissive_color, specular_transmitted_environment_light).rgb;
     }
 
-    if (in.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_ATTENUATION_ENABLED_BIT) != 0u {
+    if any((in.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_ATTENUATION_ENABLED_BIT) != vec2(0u, 0u)) {
         // We reuse the `atmospheric_fog()` function here, as it's fundamentally
         // equivalent to the attenuation that takes place inside the material volume,
         // and will allow us to eventually hook up subsurface scattering more easily
@@ -459,7 +459,7 @@ fn apply_fog(fog_params: mesh_view_types::Fog, input_color: vec4<f32>, fragment_
 }
 
 #ifdef PREMULTIPLY_ALPHA
-fn premultiply_alpha(standard_material_flags: u32, color: vec4<f32>) -> vec4<f32> {
+fn premultiply_alpha(standard_material_flags: vec2<u32>, color: vec4<f32>) -> vec4<f32> {
 // `Blend`, `Premultiplied` and `Alpha` all share the same `BlendState`. Depending
 // on the alpha mode, we premultiply the color channels by the alpha channel value,
 // (and also optionally replace the alpha value with 0.0) so that the result produces
@@ -469,7 +469,7 @@ fn premultiply_alpha(standard_material_flags: u32, color: vec4<f32>) -> vec4<f32
     //
     //     result = 1 * src_color + (1 - src_alpha) * dst_color
     let alpha_mode = standard_material_flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
-    if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_ADD {
+    if all(alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_ADD) {
         // Here, we premultiply `src_color` by `src_alpha`, and replace `src_alpha` with 0.0:
         //
         //     src_color *= src_alpha
@@ -519,7 +519,7 @@ fn main_pass_post_lighting_processing(
     var output_color = input_color;
 
     // fog
-    if (view_bindings::fog.mode != mesh_view_types::FOG_MODE_OFF && (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT) != 0u) {
+    if (view_bindings::fog.mode != mesh_view_types::FOG_MODE_OFF && any((pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT) != vec2(0u, 0u))) {
         output_color = apply_fog(view_bindings::fog, output_color, pbr_input.world_position.xyz, view_bindings::view.world_position.xyz);
     }
 

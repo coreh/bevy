@@ -12,8 +12,10 @@ struct StandardMaterial {
     ior: f32,
     attenuation_distance: f32,
     attenuation_color: vec4<f32>,
-    // 'flags' is a bit field indicating various options. u32 is 32 bits so we have up to 32 options.
-    flags: u32,
+    // 'flags' is a bit field indicating various options.
+    // u32 is 32 bits so in theory we'd have up to 32 options, however some lower-end mobile GPUs
+    // only support 16-bit integers, so we have to use the lower half of two u32s to store the flags
+    flags: vec2<u32>,
     alpha_cutoff: f32,
     parallax_depth_scale: f32,
     max_parallax_layer_count: f32,
@@ -24,30 +26,30 @@ struct StandardMaterial {
 };
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// NOTE: if these flags are updated or changed. Be sure to also update 
+// NOTE: if these flags are updated or changed. Be sure to also update
 // deferred_flags_from_mesh_material_flags and mesh_material_flags_from_deferred_flags
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-const STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT: u32         = 1u;
-const STANDARD_MATERIAL_FLAGS_EMISSIVE_TEXTURE_BIT: u32           = 2u;
-const STANDARD_MATERIAL_FLAGS_METALLIC_ROUGHNESS_TEXTURE_BIT: u32 = 4u;
-const STANDARD_MATERIAL_FLAGS_OCCLUSION_TEXTURE_BIT: u32          = 8u;
-const STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT: u32               = 16u;
-const STANDARD_MATERIAL_FLAGS_UNLIT_BIT: u32                      = 32u;
-const STANDARD_MATERIAL_FLAGS_TWO_COMPONENT_NORMAL_MAP: u32       = 64u;
-const STANDARD_MATERIAL_FLAGS_FLIP_NORMAL_MAP_Y: u32              = 128u;
-const STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT: u32                = 256u;
-const STANDARD_MATERIAL_FLAGS_DEPTH_MAP_BIT: u32                  = 512u;
-const STANDARD_MATERIAL_FLAGS_SPECULAR_TRANSMISSION_TEXTURE_BIT: u32 = 1024u;
-const STANDARD_MATERIAL_FLAGS_THICKNESS_TEXTURE_BIT: u32          = 2048u;
-const STANDARD_MATERIAL_FLAGS_DIFFUSE_TRANSMISSION_TEXTURE_BIT: u32 = 4096u;
-const STANDARD_MATERIAL_FLAGS_ATTENUATION_ENABLED_BIT: u32        = 8192u;
-const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS: u32       = 3758096384u; // (0b111u32 << 29)
-const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_OPAQUE: u32              = 0u;          // (0u32 << 29)
-const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK: u32                = 536870912u;  // (1u32 << 29)
-const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_BLEND: u32               = 1073741824u; // (2u32 << 29)
-const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_PREMULTIPLIED: u32       = 1610612736u; // (3u32 << 29)
-const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_ADD: u32                 = 2147483648u; // (4u32 << 29)
-const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MULTIPLY: u32            = 2684354560u; // (5u32 << 29)
+const STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT: vec2<u32>                   = vec2(     0u,    1u);
+const STANDARD_MATERIAL_FLAGS_EMISSIVE_TEXTURE_BIT: vec2<u32>                     = vec2(     0u,    2u);
+const STANDARD_MATERIAL_FLAGS_METALLIC_ROUGHNESS_TEXTURE_BIT: vec2<u32>           = vec2(     0u,    4u);
+const STANDARD_MATERIAL_FLAGS_OCCLUSION_TEXTURE_BIT: vec2<u32>                    = vec2(     0u,    8u);
+const STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT: vec2<u32>                         = vec2(     0u,   16u);
+const STANDARD_MATERIAL_FLAGS_UNLIT_BIT: vec2<u32>                                = vec2(     0u,   32u);
+const STANDARD_MATERIAL_FLAGS_TWO_COMPONENT_NORMAL_MAP: vec2<u32>                 = vec2(     0u,   64u);
+const STANDARD_MATERIAL_FLAGS_FLIP_NORMAL_MAP_Y: vec2<u32>                        = vec2(     0u,  128u);
+const STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT: vec2<u32>                          = vec2(     0u,  256u);
+const STANDARD_MATERIAL_FLAGS_DEPTH_MAP_BIT: vec2<u32>                            = vec2(     0u,  512u);
+const STANDARD_MATERIAL_FLAGS_SPECULAR_TRANSMISSION_TEXTURE_BIT: vec2<u32>        = vec2(     0u, 1024u);
+const STANDARD_MATERIAL_FLAGS_THICKNESS_TEXTURE_BIT: vec2<u32>                    = vec2(     0u, 2048u);
+const STANDARD_MATERIAL_FLAGS_DIFFUSE_TRANSMISSION_TEXTURE_BIT: vec2<u32>         = vec2(     0u, 4096u);
+const STANDARD_MATERIAL_FLAGS_ATTENUATION_ENABLED_BIT: vec2<u32>                  = vec2(     0u, 8192u);
+const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS: vec2<u32>                 = vec2(57344u,     0u); // (0b111u32 << 29)
+const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_OPAQUE: vec2<u32>                        = vec2(    0u,     0u); // (0u32 << 29)
+const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK: vec2<u32>                          = vec2( 8192u,     0u); // (1u32 << 29)
+const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_BLEND: vec2<u32>                         = vec2(16384u,     0u); // (2u32 << 29)
+const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_PREMULTIPLIED: vec2<u32>                 = vec2(24576u,     0u); // (3u32 << 29)
+const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_ADD: vec2<u32>                           = vec2(32768u,     0u); // (4u32 << 29)
+const STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MULTIPLY: vec2<u32>                      = vec2(40960u,     0u); // (5u32 << 29)
 // ↑ To calculate/verify the values above, use the following playground:
 // https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=7792f8dd6fc6a8d4d0b6b1776898a7f4
 
@@ -74,7 +76,7 @@ fn standard_material_new() -> StandardMaterial {
     material.max_parallax_layer_count = 16.0;
     material.max_relief_mapping_search_steps = 5u;
     material.deferred_lighting_pass_id = 1u;
-    
+
     return material;
 }
 

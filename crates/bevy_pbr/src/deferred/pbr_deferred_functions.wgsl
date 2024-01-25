@@ -40,7 +40,7 @@ fn deferred_gbuffer_from_pbr_input(in: PbrInput) -> vec4<u32> {
     let octahedral_normal = octahedral_encode(normalize(in.N));
     var base_color_srgb = vec3(0.0);
     var emissive = in.material.emissive.rgb;
-    if ((in.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) != 0u) {
+    if any((in.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) != vec2(0u, 0u)) {
         // Material is unlit, use emissive component of gbuffer for color data.
         // Unlit materials are effectively emissive.
         emissive = in.material.base_color.rgb;
@@ -69,7 +69,7 @@ fn pbr_input_from_deferred_gbuffer(frag_coord: vec4<f32>, gbuffer: vec4<u32>) ->
     let base_rough = deferred_types::unpack_unorm4x8_(gbuffer.r);
     pbr.material.perceptual_roughness = base_rough.a;
     let emissive = rgb9e5::rgb9e5_to_vec3_(gbuffer.g);
-    if ((pbr.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) != 0u) {
+    if any((pbr.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) != vec2(0u, 0u)) {
         pbr.material.base_color = vec4(emissive, 1.0);
         pbr.material.emissive = vec4(vec3(0.0), 1.0);
     } else {
