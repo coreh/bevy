@@ -54,7 +54,7 @@ impl Plugin for HttpRemotePlugin {
         // spawn the http thread
         std::thread::spawn(move || {
             rouille::start_server(
-                "localhost:8765",
+                "0.0.0.0:8765",
                 with_cors(move |request| {
                     if request.url() == "/" && request.method() == "GET" {
                         return rouille::Response::html(include_str!("index.html"));
