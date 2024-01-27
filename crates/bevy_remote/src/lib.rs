@@ -706,7 +706,7 @@ fn deserialize_component(
     // free the memory.
     unsafe {
         let mut owning_ptr =
-            OwningPtr::new(NonNull::new(std::alloc::alloc(component.layout())).unwrap());
+            OwningPtr::new(NonNull::new(std::alloc::alloc_zeroed(component.layout())).unwrap());
         let reflect = reflect_from_ptr.as_reflect_mut(owning_ptr.as_mut());
         reflect.apply(&*reflected);
         entity.insert_by_id(component_id, owning_ptr);
