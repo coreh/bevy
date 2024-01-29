@@ -29,6 +29,9 @@ pub mod brp;
 #[cfg(feature = "http")]
 pub mod http;
 
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
+
 pub struct RemotePlugin;
 
 impl Plugin for RemotePlugin {
@@ -45,6 +48,9 @@ impl Plugin for RemotePlugin {
 
         #[cfg(feature = "http")]
         app.add_plugins(http::HttpRemotePlugin);
+
+        #[cfg(target_arch = "wasm32")]
+        app.add_plugins(wasm::WasmRemotePlugin);
     }
 }
 
