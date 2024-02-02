@@ -18,7 +18,7 @@ use bevy_log::{debug, warn};
 use bevy_reflect::{
     serde::{ReflectSerializer, TypedReflectDeserializer},
     std_traits::ReflectDefault,
-    ReflectFromPtr, TypeRegistry,
+    Reflect, ReflectFromPtr, TypeRegistry,
 };
 use bevy_utils::hashbrown::{HashMap, HashSet};
 use brp::*;
@@ -578,7 +578,7 @@ fn process_brp_insert_request(
         let component_info = remote_cache.component_by_name(&component_name)?;
         debug!("Found component {:?}", component_info);
 
-        deserialize_component(
+        insert_component(
             &mut entity,
             &type_registry,
             component_name,
@@ -654,7 +654,7 @@ fn serialize_component(
     Ok(output)
 }
 
-fn deserialize_component(
+fn insert_component(
     entity: &mut EntityWorldMut<'_>,
     type_registry: &TypeRegistry,
     component_name: &BrpComponentName,
@@ -676,6 +676,36 @@ fn deserialize_component(
         return Err(BrpError::ComponentMissingReflect(component_name.clone()));
     };
 
+    let reflected = deserialize_component(
+        type_registration,
+        type_registry,
+        input,
+        session,
+        component_name,
+    )?;
+
+    // SAFETY: We got the `ComponentId`, `TypeId` and `Layout` from the same `ComponentInfo` so the
+    // representations are compatible. We hand over the owning pointer to the world entity
+    // after applying the reflected data to it, and its now the world's responsibility to
+    // free the memory.
+    unsafe {
+        let mut owning_ptr =
+            OwningPtr::new(NonNull::new(std::alloc::alloc_zeroed(component.layout())).unwrap());
+        let reflect = reflect_from_ptr.as_reflect_mut(owning_ptr.as_mut());
+        reflect.apply(&*reflected);
+        entity.insert_by_id(component_id, owning_ptr);
+    };
+
+    Ok(())
+}
+
+fn deserialize_component(
+    type_registration: &bevy_reflect::TypeRegistration,
+    type_registry: &TypeRegistry,
+    input: &BrpComponent,
+    session: &RemoteSession,
+    component_name: &String,
+) -> Result<Box<dyn Reflect>, BrpError> {
     let reflect_deserializer = TypedReflectDeserializer::new(&type_registration, &type_registry);
     let reflected = match input {
         BrpComponent::Json(string) => {
@@ -712,20 +742,7 @@ fn deserialize_component(
             return Err(BrpError::ComponentDeserialization(component_name.clone()))
         }
     };
-
-    // SAFETY: We got the `ComponentId`, `TypeId` and `Layout` from the same `ComponentInfo` so the
-    // representations are compatible. We hand over the owning pointer to the world entity
-    // after applying the reflected data to it, and its now the world's responsibility to
-    // free the memory.
-    unsafe {
-        let mut owning_ptr =
-            OwningPtr::new(NonNull::new(std::alloc::alloc_zeroed(component.layout())).unwrap());
-        let reflect = reflect_from_ptr.as_reflect_mut(owning_ptr.as_mut());
-        reflect.apply(&*reflected);
-        entity.insert_by_id(component_id, owning_ptr);
-    };
-
-    Ok(())
+    Ok(reflected)
 }
 
 fn partial_eq_component(
@@ -750,42 +767,13 @@ fn partial_eq_component(
         return Err(BrpError::ComponentMissingReflect(component_name.clone()));
     };
 
-    let reflect_deserializer = TypedReflectDeserializer::new(&type_registration, &type_registry);
-    let reflected = match input {
-        BrpComponent::Json(string) => {
-            if session.component_format != RemoteComponentFormat::Json {
-                warn!("Received component in JSON format, but session is not set to JSON. Accepting anyway.");
-            }
-            let mut deserializer = serde_json::de::Deserializer::from_str(&string);
-            match reflect_deserializer.deserialize(&mut deserializer) {
-                Ok(r) => r,
-                Err(_) => {
-                    return Err(BrpError::ComponentDeserialization(component_name.clone()));
-                }
-            }
-        }
-        BrpComponent::Ron(string) => {
-            if session.component_format != RemoteComponentFormat::Ron {
-                warn!("Received component in RON format, but session is not set to RON. Accepting anyway.");
-            }
-            let mut deserializer = ron::de::Deserializer::from_str(&string).unwrap();
-            match reflect_deserializer.deserialize(&mut deserializer) {
-                Ok(r) => r,
-                Err(_) => {
-                    return Err(BrpError::ComponentDeserialization(component_name.clone()));
-                }
-            }
-        }
-        BrpComponent::Default => {
-            let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-                return Err(BrpError::ComponentMissingDefault(component_name.clone()));
-            };
-            reflect_default.default()
-        }
-        BrpComponent::Unserializable => {
-            return Err(BrpError::ComponentDeserialization(component_name.clone()))
-        }
-    };
+    let reflected = deserialize_component(
+        type_registration,
+        type_registry,
+        input,
+        session,
+        component_name,
+    )?;
 
     // SAFETY: We got the `ComponentId`, `TypeId` and `Layout` from the same `ComponentInfo` so the
     // representations are compatible. We hand over the owning pointer to the world entity
