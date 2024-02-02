@@ -17,6 +17,7 @@ use bevy_ecs::{
 use bevy_log::{debug, warn};
 use bevy_reflect::{
     serde::{ReflectSerializer, TypedReflectDeserializer},
+    std_traits::ReflectDefault,
     ReflectFromPtr, TypeRegistry,
 };
 use bevy_utils::hashbrown::{HashMap, HashSet};
@@ -701,6 +702,12 @@ fn deserialize_component(
                 }
             }
         }
+        BrpComponent::Default => {
+            let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+                return Err(BrpError::ComponentMissingDefault(component_name.clone()));
+            };
+            reflect_default.default()
+        }
         BrpComponent::Unserializable => {
             return Err(BrpError::ComponentDeserialization(component_name.clone()))
         }
@@ -768,6 +775,12 @@ fn partial_eq_component(
                     return Err(BrpError::ComponentDeserialization(component_name.clone()));
                 }
             }
+        }
+        BrpComponent::Default => {
+            let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+                return Err(BrpError::ComponentMissingDefault(component_name.clone()));
+            };
+            reflect_default.default()
         }
         BrpComponent::Unserializable => {
             return Err(BrpError::ComponentDeserialization(component_name.clone()))

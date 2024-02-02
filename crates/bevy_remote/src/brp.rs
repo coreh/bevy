@@ -76,6 +76,9 @@ pub enum BrpComponent {
     #[serde(rename = "RON")]
     Ron(String),
 
+    #[serde(rename = "<<Default>>")]
+    Default,
+
     #[serde(rename = "<<Unserializable>>")]
     Unserializable,
 }
@@ -165,6 +168,7 @@ pub enum BrpError {
     ComponentMissingTypeId(String),
     ComponentMissingTypeRegistration(String),
     ComponentMissingReflect(String),
+    ComponentMissingDefault(String),
     ComponentMissingPartialEq(String),
     ComponentInvalidAccess(String),
     ComponentDeserialization(String),
