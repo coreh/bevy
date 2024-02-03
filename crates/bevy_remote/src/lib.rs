@@ -458,10 +458,10 @@ fn process_brp_get_or_query_request(
                             result.components.insert(component_name, serialized);
                         }
                         Err(
-                            BrpError::ComponentMissingTypeRegistration(_)
-                            | BrpError::ComponentMissingReflect(_)
-                            | BrpError::ComponentMissingTypeId(_)
-                            | BrpError::ComponentSerialization(_),
+                            BrpError::MissingTypeRegistration(_)
+                            | BrpError::MissingReflect(_)
+                            | BrpError::MissingTypeId(_)
+                            | BrpError::Serialization(_),
                         ) => {
                             result
                                 .components
@@ -616,16 +616,14 @@ fn serialize_component(
 ) -> Result<BrpSerializedData, BrpError> {
     let component_id = component.id();
     let Some(type_id) = component.type_id() else {
-        return Err(BrpError::ComponentMissingTypeId(component_name.clone()));
+        return Err(BrpError::MissingTypeId(component_name.clone()));
     };
     let type_registration = type_registry.get(type_id);
     let Some(type_registration) = type_registration else {
-        return Err(BrpError::ComponentMissingTypeRegistration(
-            component_name.clone(),
-        ));
+        return Err(BrpError::MissingTypeRegistration(component_name.clone()));
     };
     let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
-        return Err(BrpError::ComponentMissingReflect(component_name.clone()));
+        return Err(BrpError::MissingReflect(component_name.clone()));
     };
     let Some(component_ptr) = entity.get_by_id(component_id) else {
         return Err(BrpError::ComponentInvalidAccess(component_name.clone()));
@@ -644,11 +642,11 @@ fn serialize_component(
         match session.component_format {
             RemoteComponentFormat::Ron => BrpSerializedData::Ron(
                 ron::ser::to_string(&serializer)
-                    .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
             ),
             RemoteComponentFormat::Json => BrpSerializedData::Json(
                 serde_json::ser::to_string(&serializer)
-                    .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
             ),
         }
     };
@@ -665,13 +663,11 @@ fn insert_component(
     session: &RemoteSession,
 ) -> Result<(), BrpError> {
     let Some(type_id) = component.type_id() else {
-        return Err(BrpError::ComponentMissingTypeId(component_name.clone()));
+        return Err(BrpError::MissingTypeId(component_name.clone()));
     };
     let type_registration = type_registry.get(type_id);
     let Some(type_registration) = type_registration else {
-        return Err(BrpError::ComponentMissingTypeRegistration(
-            component_name.clone(),
-        ));
+        return Err(BrpError::MissingTypeRegistration(component_name.clone()));
     };
 
     let reflected = deserialize_component(
@@ -683,11 +679,11 @@ fn insert_component(
     )?;
 
     let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-        return Err(BrpError::ComponentMissingDefault(component_name.clone()));
+        return Err(BrpError::MissingDefault(component_name.clone()));
     };
 
     let Some(reflect_component) = type_registration.data::<ReflectComponent>() else {
-        return Err(BrpError::ComponentMissingReflect(component_name.clone()));
+        return Err(BrpError::MissingReflect(component_name.clone()));
     };
 
     let mut reflect = reflect_default.default();
@@ -716,7 +712,7 @@ fn deserialize_component(
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
-                    return Err(BrpError::ComponentDeserialization(component_name.clone()));
+                    return Err(BrpError::Deserialization(component_name.clone()));
                 }
             }
         }
@@ -728,18 +724,18 @@ fn deserialize_component(
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
-                    return Err(BrpError::ComponentDeserialization(component_name.clone()));
+                    return Err(BrpError::Deserialization(component_name.clone()));
                 }
             }
         }
         BrpSerializedData::Default => {
             let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-                return Err(BrpError::ComponentMissingDefault(component_name.clone()));
+                return Err(BrpError::MissingDefault(component_name.clone()));
             };
             reflect_default.default()
         }
         BrpSerializedData::Unserializable => {
-            return Err(BrpError::ComponentDeserialization(component_name.clone()))
+            return Err(BrpError::Deserialization(component_name.clone()))
         }
     };
     Ok(reflected)
@@ -755,16 +751,14 @@ fn partial_eq_component(
 ) -> Result<bool, BrpError> {
     let component_id = component.id();
     let Some(type_id) = component.type_id() else {
-        return Err(BrpError::ComponentMissingTypeId(component_name.clone()));
+        return Err(BrpError::MissingTypeId(component_name.clone()));
     };
     let type_registration = type_registry.get(type_id);
     let Some(type_registration) = type_registration else {
-        return Err(BrpError::ComponentMissingTypeRegistration(
-            component_name.clone(),
-        ));
+        return Err(BrpError::MissingTypeRegistration(component_name.clone()));
     };
     let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
-        return Err(BrpError::ComponentMissingReflect(component_name.clone()));
+        return Err(BrpError::MissingReflect(component_name.clone()));
     };
 
     let reflected = deserialize_component(
@@ -789,9 +783,7 @@ fn partial_eq_component(
         // TODO: Figure out if there's a way to make both orders give matching results
         match reflected.reflect_partial_eq(reflect) {
             Some(r) => Ok(r),
-            None => Err(BrpError::ComponentMissingPartialEq(
-                component.name().to_string(),
-            )),
+            None => Err(BrpError::MissingPartialEq(component.name().to_string())),
         }
     }
 }
@@ -813,10 +805,10 @@ fn process_brp_get_asset_request(
     let asset = remote_cache.component_by_name(name)?;
 
     let Some(type_id) = asset.type_id() else {
-        return Err(BrpError::ComponentMissingTypeId(name.clone()));
+        return Err(BrpError::MissingTypeId(name.clone()));
     };
     let Some(type_registration) = type_registry.get(type_id) else {
-        return Err(BrpError::ComponentMissingTypeRegistration(name.clone()));
+        return Err(BrpError::MissingTypeRegistration(name.clone()));
     };
 
     let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
@@ -824,17 +816,17 @@ fn process_brp_get_asset_request(
     };
 
     let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id()) else {
-        return Err(BrpError::ComponentMissingTypeRegistration(name.clone()));
+        return Err(BrpError::MissingTypeRegistration(name.clone()));
     };
 
     let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
-        return Err(BrpError::ComponentMissingTypeRegistration(name.clone()));
+        return Err(BrpError::MissingTypeRegistration(name.clone()));
     };
 
     let reflected = deserialize_component(type_registration, type_registry, handle, session, name)?;
 
     let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-        return Err(BrpError::ComponentMissingDefault(name.clone()));
+        return Err(BrpError::MissingDefault(name.clone()));
     };
 
     let mut reflect = reflect_default.default();
@@ -852,12 +844,11 @@ fn process_brp_get_asset_request(
     let serializer = ReflectSerializer::new(asset_reflect, &type_registry);
     let output = match session.component_format {
         RemoteComponentFormat::Ron => BrpSerializedData::Ron(
-            ron::ser::to_string(&serializer)
-                .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
+            ron::ser::to_string(&serializer).map_err(|e| BrpError::Serialization(e.to_string()))?,
         ),
         RemoteComponentFormat::Json => BrpSerializedData::Json(
             serde_json::ser::to_string(&serializer)
-                .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
+                .map_err(|e| BrpError::Serialization(e.to_string()))?,
         ),
     };
 

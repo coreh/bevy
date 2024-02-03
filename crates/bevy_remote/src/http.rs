@@ -15,15 +15,16 @@ impl From<BrpResponse> for rouille::Response {
             BrpResponseContent::Error(err) => match err {
                 BrpError::EntityNotFound => response.with_status_code(404), // Not found
                 BrpError::ComponentNotFound(_) => response.with_status_code(404), // Not found
+                BrpError::AssetNotFound(_) => response.with_status_code(404), // Not found
                 BrpError::Timeout => response.with_status_code(408),        // Request timeout
                 BrpError::InternalError => response.with_status_code(500),  // Internal server error
                 BrpError::Unimplemented => response.with_status_code(501),  // Not implemented
                 BrpError::ComponentAmbiguous(_) => response.with_status_code(409), // Conflict
-                BrpError::ComponentMissingTypeId(_) => response.with_status_code(415), // Unsupported media type
-                BrpError::ComponentMissingTypeRegistration(_) => response.with_status_code(415), // Unsupported media type
-                BrpError::ComponentMissingReflect(_) => response.with_status_code(415), // Unsupported media type
-                BrpError::ComponentInvalidAccess(_) => response.with_status_code(423),  // Locked
-                _ => response.with_status_code(400), // Bad request
+                BrpError::MissingTypeId(_) => response.with_status_code(415), // Unsupported media type
+                BrpError::MissingTypeRegistration(_) => response.with_status_code(415), // Unsupported media type
+                BrpError::MissingReflect(_) => response.with_status_code(415), // Unsupported media type
+                BrpError::ComponentInvalidAccess(_) => response.with_status_code(423), // Locked
+                _ => response.with_status_code(400),                           // Bad request
             },
             _ => response,
         };
