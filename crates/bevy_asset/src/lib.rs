@@ -228,6 +228,8 @@ impl Plugin for AssetPlugin {
         let mut order = app.world.resource_mut::<MainScheduleOrder>();
         order.insert_after(First, UpdateAssets);
         order.insert_after(PostUpdate, AssetEvents);
+
+        app.register_type::<AssetIndex>();
     }
 }
 
