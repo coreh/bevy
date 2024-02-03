@@ -251,6 +251,11 @@ fn process_brp_request(
             ref name,
             ref handle,
         } => process_brp_get_asset_request(world, session, request.id, name, handle),
+        BrpRequestContent::UpdateAsset {
+            ref name,
+            ref handle,
+            ref asset,
+        } => process_brp_update_asset_request(world, session, request.id, name, handle, asset),
         _ => Err(BrpError::Unimplemented),
     }
 }
@@ -892,4 +897,72 @@ fn process_brp_get_asset_request(
             asset: output,
         },
     ))
+}
+
+fn process_brp_update_asset_request(
+    world: &mut World,
+    session: &RemoteSession,
+    id: BrpId,
+    name: &BrpAssetName,
+    handle: &BrpSerializedData,
+    data: &BrpSerializedData,
+) -> Result<BrpResponse, BrpError> {
+    let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
+    let remote_cache = world.resource::<RemoteCache>().clone();
+
+    let type_registry = &*type_registry_arc.read();
+
+    remote_cache.update_components(world, [name.as_str()].iter().cloned());
+
+    let asset = remote_cache.component_by_name(name)?;
+
+    let Some(type_id) = asset.type_id() else {
+        return Err(BrpError::MissingTypeId(name.clone()));
+    };
+    let Some(type_registration) = type_registry.get(type_id) else {
+        return Err(BrpError::MissingTypeRegistration(name.clone()));
+    };
+
+    let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
+        return Err(BrpError::AssetNotFound(name.clone()));
+    };
+
+    let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id()) else {
+        return Err(BrpError::MissingTypeRegistration(name.clone()));
+    };
+
+    let asset_name = asset_type_registration.type_info().type_path().to_string();
+
+    let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
+        return Err(BrpError::MissingTypeRegistration(name.clone()));
+    };
+
+    let reflected = deserialize_component(type_registration, type_registry, handle, session, name)?;
+
+    let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+        return Err(BrpError::MissingDefault(name.clone()));
+    };
+
+    let mut reflect = reflect_default.default();
+    reflect.apply(&*reflected);
+
+    let untyped_handle = reflect_handle
+        .downcast_handle_untyped(reflect.as_any())
+        .unwrap();
+
+    let Some(asset_reflect) = reflect_asset.get_mut(world, untyped_handle) else {
+        return Err(BrpError::AssetNotFound(name.clone()));
+    };
+
+    let asset_reflected = deserialize_component(
+        asset_type_registration,
+        type_registry,
+        data,
+        session,
+        &asset_name,
+    )?;
+
+    asset_reflect.apply(&*asset_reflected);
+
+    Ok(BrpResponse::new(id, BrpResponseContent::Ok))
 }

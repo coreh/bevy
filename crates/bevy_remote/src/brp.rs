@@ -61,7 +61,7 @@ pub enum BrpRequestContent {
     UpdateAsset {
         name: BrpAssetName,
         handle: BrpSerializedData,
-        data: BrpSerializedData,
+        asset: BrpSerializedData,
     },
 }
 
