@@ -716,8 +716,11 @@ fn deserialize_component(
             let mut deserializer = serde_json::de::Deserializer::from_str(&string);
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
-                Err(_) => {
-                    return Err(BrpError::Deserialization(component_name.clone()));
+                Err(e) => {
+                    return Err(BrpError::Deserialization {
+                        type_name: component_name.clone(),
+                        error: e.to_string(),
+                    });
                 }
             }
         }
@@ -728,8 +731,11 @@ fn deserialize_component(
             let mut deserializer = json5::Deserializer::from_str(&string).unwrap();
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
-                Err(_) => {
-                    return Err(BrpError::Deserialization(component_name.clone()));
+                Err(e) => {
+                    return Err(BrpError::Deserialization {
+                        type_name: component_name.clone(),
+                        error: e.to_string(),
+                    });
                 }
             }
         }
@@ -740,8 +746,11 @@ fn deserialize_component(
             let mut deserializer = ron::de::Deserializer::from_str(&string).unwrap();
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
-                Err(_) => {
-                    return Err(BrpError::Deserialization(component_name.clone()));
+                Err(e) => {
+                    return Err(BrpError::Deserialization {
+                        type_name: component_name.clone(),
+                        error: e.to_string(),
+                    });
                 }
             }
         }
@@ -752,7 +761,10 @@ fn deserialize_component(
             reflect_default.default()
         }
         BrpSerializedData::Unserializable => {
-            return Err(BrpError::Deserialization(component_name.clone()))
+            return Err(BrpError::Deserialization {
+                type_name: component_name.clone(),
+                error: "Data is unserializable".to_string(),
+            })
         }
     };
     Ok(reflected)

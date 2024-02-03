@@ -190,7 +190,7 @@ pub enum BrpError {
     MissingDefault(String),
     MissingPartialEq(String),
     Serialization(String),
-    Deserialization(String),
+    Deserialization { type_name: String, error: String },
     AssetNotFound(String),
     InvalidRequest,
     InvalidEntity,
