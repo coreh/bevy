@@ -1,16 +1,13 @@
-use std::{
-    ptr::NonNull,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
 use bevy_asset::{ReflectAsset, ReflectHandle};
 use bevy_ecs::{
     component::{ComponentId, ComponentInfo},
     entity::Entity,
-    ptr::{OwningPtr, Ptr},
+    ptr::Ptr,
     query::QueryBuilder,
-    reflect::AppTypeRegistry,
+    reflect::{AppTypeRegistry, ReflectComponent},
     schedule::ScheduleLabel,
     system::Resource,
     world::{EntityRef, EntityWorldMut, FilteredEntityRef, World},
@@ -667,7 +664,6 @@ fn insert_component(
     input: &BrpSerializedData,
     session: &RemoteSession,
 ) -> Result<(), BrpError> {
-    let component_id = component.id();
     let Some(type_id) = component.type_id() else {
         return Err(BrpError::ComponentMissingTypeId(component_name.clone()));
     };
@@ -676,9 +672,6 @@ fn insert_component(
         return Err(BrpError::ComponentMissingTypeRegistration(
             component_name.clone(),
         ));
-    };
-    let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
-        return Err(BrpError::ComponentMissingReflect(component_name.clone()));
     };
 
     let reflected = deserialize_component(
@@ -689,17 +682,19 @@ fn insert_component(
         component_name,
     )?;
 
-    // SAFETY: We got the `ComponentId`, `TypeId` and `Layout` from the same `ComponentInfo` so the
-    // representations are compatible. We hand over the owning pointer to the world entity
-    // after applying the reflected data to it, and its now the world's responsibility to
-    // free the memory.
-    unsafe {
-        let mut owning_ptr =
-            OwningPtr::new(NonNull::new(std::alloc::alloc_zeroed(component.layout())).unwrap());
-        let reflect = reflect_from_ptr.as_reflect_mut(owning_ptr.as_mut());
-        reflect.apply(&*reflected);
-        entity.insert_by_id(component_id, owning_ptr);
+    let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+        return Err(BrpError::ComponentMissingDefault(component_name.clone()));
     };
+
+    let Some(reflect_component) = type_registration.data::<ReflectComponent>() else {
+        return Err(BrpError::ComponentMissingReflect(component_name.clone()));
+    };
+
+    let mut reflect = reflect_default.default();
+
+    reflect.apply(&*reflected);
+
+    reflect_component.insert(entity, &*reflect);
 
     Ok(())
 }
