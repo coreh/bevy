@@ -54,6 +54,15 @@ pub enum BrpRequestContent {
         filter: BrpQueryFilter,
         watermark: Option<BrpWatermark>,
     },
+    GetAsset {
+        name: BrpAssetName,
+        handle: BrpSerializedData,
+    },
+    UpdateAsset {
+        name: BrpAssetName,
+        handle: BrpSerializedData,
+        data: BrpSerializedData,
+    },
 }
 
 pub type BrpComponentNames = Vec<BrpComponentName>;
@@ -69,7 +78,7 @@ pub type BrpComponentMap = HashMap<BrpComponentName, BrpSerializedData>;
 pub type BrpComponentOptionalMap = HashMap<BrpComponentName, Option<BrpSerializedData>>;
 pub type BrpComponentHasMap = HashMap<BrpComponentName, bool>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum BrpSerializedData {
     #[serde(rename = "JSON")]
     Json(String),
@@ -146,6 +155,11 @@ pub enum BrpResponseContent {
         entities: BrpQueryResults,
         watermark: BrpWatermark,
     },
+    GetAsset {
+        name: BrpAssetName,
+        handle: BrpSerializedData,
+        asset: BrpSerializedData,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -174,6 +188,7 @@ pub enum BrpError {
     ComponentInvalidAccess(String),
     ComponentDeserialization(String),
     ComponentSerialization(String),
+    AssetNotFound(String),
     InvalidRequest,
     InvalidEntity,
     InvalidQuery,

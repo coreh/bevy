@@ -4,6 +4,7 @@ use std::{
 };
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
+use bevy_asset::{ReflectAsset, ReflectHandle};
 use bevy_ecs::{
     component::{ComponentId, ComponentInfo},
     entity::Entity,
@@ -248,6 +249,10 @@ fn process_brp_request(
             ref entity,
             ref components,
         } => process_brp_insert_request(world, session, request.id, entity, components),
+        BrpRequestContent::GetAsset {
+            ref name,
+            ref handle,
+        } => process_brp_get_asset_request(world, session, request.id, name, handle),
         _ => Err(BrpError::Unimplemented),
     }
 }
@@ -794,4 +799,79 @@ fn partial_eq_component(
             )),
         }
     }
+}
+
+fn process_brp_get_asset_request(
+    world: &mut World,
+    session: &RemoteSession,
+    id: BrpId,
+    name: &BrpAssetName,
+    handle: &BrpSerializedData,
+) -> Result<BrpResponse, BrpError> {
+    let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
+    let remote_cache = world.resource::<RemoteCache>().clone();
+
+    let type_registry = &*type_registry_arc.read();
+
+    remote_cache.update_components(world, [name.as_str()].iter().cloned());
+
+    let asset = remote_cache.component_by_name(name)?;
+
+    let Some(type_id) = asset.type_id() else {
+        return Err(BrpError::ComponentMissingTypeId(name.clone()));
+    };
+    let Some(type_registration) = type_registry.get(type_id) else {
+        return Err(BrpError::ComponentMissingTypeRegistration(name.clone()));
+    };
+
+    let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
+        return Err(BrpError::AssetNotFound(name.clone()));
+    };
+
+    let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id()) else {
+        return Err(BrpError::ComponentMissingTypeRegistration(name.clone()));
+    };
+
+    let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
+        return Err(BrpError::ComponentMissingTypeRegistration(name.clone()));
+    };
+
+    let reflected = deserialize_component(type_registration, type_registry, handle, session, name)?;
+
+    let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+        return Err(BrpError::ComponentMissingDefault(name.clone()));
+    };
+
+    let mut reflect = reflect_default.default();
+
+    reflect.apply(&*reflected);
+
+    let untyped_handle = reflect_handle
+        .downcast_handle_untyped(reflect.as_any())
+        .unwrap();
+
+    let Some(asset_reflect) = reflect_asset.get(world, untyped_handle) else {
+        return Err(BrpError::AssetNotFound(name.clone()));
+    };
+
+    let serializer = ReflectSerializer::new(asset_reflect, &type_registry);
+    let output = match session.component_format {
+        RemoteComponentFormat::Ron => BrpSerializedData::Ron(
+            ron::ser::to_string(&serializer)
+                .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
+        ),
+        RemoteComponentFormat::Json => BrpSerializedData::Json(
+            serde_json::ser::to_string(&serializer)
+                .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
+        ),
+    };
+
+    Ok(BrpResponse::new(
+        id,
+        BrpResponseContent::GetAsset {
+            name: name.clone(),
+            handle: handle.clone(),
+            asset: output,
+        },
+    ))
 }
