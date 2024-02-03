@@ -83,6 +83,9 @@ pub enum BrpSerializedData {
     #[serde(rename = "JSON")]
     Json(String),
 
+    #[serde(rename = "JSON5")]
+    Json5(String),
+
     #[serde(rename = "RON")]
     Ron(String),
 

@@ -69,6 +69,7 @@ pub struct RemoteSession {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemoteComponentFormat {
     Json,
+    Json5,
     Ron,
 }
 
@@ -644,6 +645,10 @@ fn serialize_component(
                 ron::ser::to_string(&serializer)
                     .map_err(|e| BrpError::Serialization(e.to_string()))?,
             ),
+            RemoteComponentFormat::Json5 => BrpSerializedData::Json5(
+                json5::to_string(&serializer)
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
+            ),
             RemoteComponentFormat::Json => BrpSerializedData::Json(
                 serde_json::ser::to_string(&serializer)
                     .map_err(|e| BrpError::Serialization(e.to_string()))?,
@@ -709,6 +714,18 @@ fn deserialize_component(
                 warn!("Received component in JSON format, but session is not set to JSON. Accepting anyway.");
             }
             let mut deserializer = serde_json::de::Deserializer::from_str(&string);
+            match reflect_deserializer.deserialize(&mut deserializer) {
+                Ok(r) => r,
+                Err(_) => {
+                    return Err(BrpError::Deserialization(component_name.clone()));
+                }
+            }
+        }
+        BrpSerializedData::Json5(string) => {
+            if session.component_format != RemoteComponentFormat::Json5 {
+                warn!("Received component in JSON5 format, but session is not set to JSON5. Accepting anyway.");
+            }
+            let mut deserializer = json5::Deserializer::from_str(&string).unwrap();
             match reflect_deserializer.deserialize(&mut deserializer) {
                 Ok(r) => r,
                 Err(_) => {
@@ -845,6 +862,9 @@ fn process_brp_get_asset_request(
     let output = match session.component_format {
         RemoteComponentFormat::Ron => BrpSerializedData::Ron(
             ron::ser::to_string(&serializer).map_err(|e| BrpError::Serialization(e.to_string()))?,
+        ),
+        RemoteComponentFormat::Json5 => BrpSerializedData::Json5(
+            json5::to_string(&serializer).map_err(|e| BrpError::Serialization(e.to_string()))?,
         ),
         RemoteComponentFormat::Json => BrpSerializedData::Json(
             serde_json::ser::to_string(&serializer)
