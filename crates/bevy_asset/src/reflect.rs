@@ -1,9 +1,6 @@
 use std::any::{Any, TypeId};
 
-use bevy_ecs::{
-    ptr::OwningPtr,
-    world::{unsafe_world_cell::UnsafeWorldCell, World},
-};
+use bevy_ecs::world::{unsafe_world_cell::UnsafeWorldCell, World};
 use bevy_reflect::{FromReflect, FromType, Reflect};
 
 use crate::{Asset, Assets, Handle, UntypedAssetId, UntypedHandle};
