@@ -950,10 +950,6 @@ fn process_brp_update_asset_request(
         .downcast_handle_untyped(reflect.as_any())
         .unwrap();
 
-    let Some(asset_reflect) = reflect_asset.get_mut(world, untyped_handle) else {
-        return Err(BrpError::AssetNotFound(name.clone()));
-    };
-
     let asset_reflected = deserialize_component(
         asset_type_registration,
         type_registry,
@@ -962,7 +958,7 @@ fn process_brp_update_asset_request(
         &asset_name,
     )?;
 
-    asset_reflect.apply(&*asset_reflected);
+    reflect_asset.insert(world, untyped_handle, &*asset_reflected);
 
     Ok(BrpResponse::new(id, BrpResponseContent::Ok))
 }
