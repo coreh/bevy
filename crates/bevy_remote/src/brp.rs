@@ -63,13 +63,14 @@ pub type BrpId = u64;
 pub type BrpWatermark = u64;
 
 pub type BrpComponentName = String;
+pub type BrpAssetName = String;
 
-pub type BrpComponentMap = HashMap<BrpComponentName, BrpComponent>;
-pub type BrpComponentOptionalMap = HashMap<BrpComponentName, Option<BrpComponent>>;
+pub type BrpComponentMap = HashMap<BrpComponentName, BrpSerializedData>;
+pub type BrpComponentOptionalMap = HashMap<BrpComponentName, Option<BrpSerializedData>>;
 pub type BrpComponentHasMap = HashMap<BrpComponentName, bool>;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum BrpComponent {
+pub enum BrpSerializedData {
     #[serde(rename = "JSON")]
     Json(String),
 

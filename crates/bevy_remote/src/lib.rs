@@ -463,7 +463,7 @@ fn process_brp_get_or_query_request(
                         ) => {
                             result
                                 .components
-                                .insert(component_name, BrpComponent::Unserializable);
+                                .insert(component_name, BrpSerializedData::Unserializable);
                         }
                         Err(err) => return Err(err),
                     }
@@ -555,7 +555,7 @@ fn process_brp_insert_request(
     session: &RemoteSession,
     id: BrpId,
     entity: &Entity,
-    components: &HashMap<BrpComponentName, BrpComponent>,
+    components: &HashMap<BrpComponentName, BrpSerializedData>,
 ) -> Result<BrpResponse, BrpError> {
     let remote_cache = world.resource::<RemoteCache>().clone();
     let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
@@ -611,7 +611,7 @@ fn serialize_component(
     component_name: &BrpComponentName,
     component: &ComponentInfo,
     session: &RemoteSession,
-) -> Result<BrpComponent, BrpError> {
+) -> Result<BrpSerializedData, BrpError> {
     let component_id = component.id();
     let Some(type_id) = component.type_id() else {
         return Err(BrpError::ComponentMissingTypeId(component_name.clone()));
@@ -640,11 +640,11 @@ fn serialize_component(
         let reflect = reflect_from_ptr.as_reflect(component_ptr);
         let serializer = ReflectSerializer::new(reflect, &type_registry);
         match session.component_format {
-            RemoteComponentFormat::Ron => BrpComponent::Ron(
+            RemoteComponentFormat::Ron => BrpSerializedData::Ron(
                 ron::ser::to_string(&serializer)
                     .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
             ),
-            RemoteComponentFormat::Json => BrpComponent::Json(
+            RemoteComponentFormat::Json => BrpSerializedData::Json(
                 serde_json::ser::to_string(&serializer)
                     .map_err(|e| BrpError::ComponentSerialization(e.to_string()))?,
             ),
@@ -659,7 +659,7 @@ fn insert_component(
     type_registry: &TypeRegistry,
     component_name: &BrpComponentName,
     component: &ComponentInfo,
-    input: &BrpComponent,
+    input: &BrpSerializedData,
     session: &RemoteSession,
 ) -> Result<(), BrpError> {
     let component_id = component.id();
@@ -702,13 +702,13 @@ fn insert_component(
 fn deserialize_component(
     type_registration: &bevy_reflect::TypeRegistration,
     type_registry: &TypeRegistry,
-    input: &BrpComponent,
+    input: &BrpSerializedData,
     session: &RemoteSession,
     component_name: &String,
 ) -> Result<Box<dyn Reflect>, BrpError> {
     let reflect_deserializer = TypedReflectDeserializer::new(&type_registration, &type_registry);
     let reflected = match input {
-        BrpComponent::Json(string) => {
+        BrpSerializedData::Json(string) => {
             if session.component_format != RemoteComponentFormat::Json {
                 warn!("Received component in JSON format, but session is not set to JSON. Accepting anyway.");
             }
@@ -720,7 +720,7 @@ fn deserialize_component(
                 }
             }
         }
-        BrpComponent::Ron(string) => {
+        BrpSerializedData::Ron(string) => {
             if session.component_format != RemoteComponentFormat::Ron {
                 warn!("Received component in RON format, but session is not set to RON. Accepting anyway.");
             }
@@ -732,13 +732,13 @@ fn deserialize_component(
                 }
             }
         }
-        BrpComponent::Default => {
+        BrpSerializedData::Default => {
             let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
                 return Err(BrpError::ComponentMissingDefault(component_name.clone()));
             };
             reflect_default.default()
         }
-        BrpComponent::Unserializable => {
+        BrpSerializedData::Unserializable => {
             return Err(BrpError::ComponentDeserialization(component_name.clone()))
         }
     };
@@ -750,7 +750,7 @@ fn partial_eq_component(
     type_registry: &TypeRegistry,
     component_name: &BrpComponentName,
     component: &ComponentInfo,
-    input: &BrpComponent,
+    input: &BrpSerializedData,
     session: &RemoteSession,
 ) -> Result<bool, BrpError> {
     let component_id = component.id();
