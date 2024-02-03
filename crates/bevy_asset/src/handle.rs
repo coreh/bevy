@@ -3,9 +3,10 @@ use crate::{
     UntypedAssetId,
 };
 use bevy_ecs::prelude::*;
-use bevy_reflect::{Reflect, TypePath};
-use bevy_utils::{get_short_name, Uuid};
+use bevy_reflect::{Reflect, ReflectSerialize, TypePath, Uuid};
+use bevy_utils::get_short_name;
 use crossbeam_channel::{Receiver, Sender};
+use serde::Serialize;
 use std::{
     any::TypeId,
     hash::{Hash, Hasher},
@@ -121,7 +122,7 @@ impl std::fmt::Debug for StrongHandle {
 ///
 /// [`Handle::Strong`] also provides access to useful [`Asset`] metadata, such as the [`AssetPath`] (if it exists).
 #[derive(Component, Reflect)]
-#[reflect(Component)]
+#[reflect(Component, Serialize)]
 pub enum Handle<A: Asset> {
     /// A "strong" reference to a live (or loading) [`Asset`]. If a [`Handle`] is [`Handle::Strong`], the [`Asset`] will be kept
     /// alive until the [`Handle`] is dropped. Strong handles also provide access to additional asset metadata.
@@ -129,6 +130,22 @@ pub enum Handle<A: Asset> {
     /// A "weak" reference to an [`Asset`]. If a [`Handle`] is [`Handle::Weak`], it does not necessarily reference a live [`Asset`],
     /// nor will it keep assets alive.
     Weak(AssetId<A>),
+}
+
+impl<A: Asset> Serialize for Handle<A> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let Handle::Weak(id) = self.clone_weak() else {
+            // `.clone_weak()` will always return a weak handle
+            unreachable!();
+        };
+
+        // Always serialize as a weak handle, as the asset is not guaranteed to be alive
+        // when we later deserialize this handle.
+        serializer.serialize_newtype_variant(std::any::type_name::<Self>(), 1, "Weak", &id)
+    }
 }
 
 impl<T: Asset> Clone for Handle<T> {
