@@ -1,6 +1,9 @@
 use std::any::{Any, TypeId};
 
-use bevy_ecs::world::{unsafe_world_cell::UnsafeWorldCell, World};
+use bevy_ecs::{
+    ptr::OwningPtr,
+    world::{unsafe_world_cell::UnsafeWorldCell, World},
+};
 use bevy_reflect::{FromReflect, FromType, Reflect};
 
 use crate::{Asset, Assets, Handle, UntypedAssetId, UntypedHandle};
@@ -197,6 +200,7 @@ impl<A: Asset + FromReflect> FromType<A> for ReflectAsset {
 pub struct ReflectHandle {
     asset_type_id: TypeId,
     downcast_handle_untyped: fn(&dyn Any) -> Option<UntypedHandle>,
+    untyped_from_ptr: fn(OwningPtr) -> UntypedHandle,
     typed: fn(UntypedHandle) -> Box<dyn Reflect>,
 }
 impl ReflectHandle {
@@ -208,6 +212,11 @@ impl ReflectHandle {
     /// A way to go from a [`Handle<T>`] in a `dyn Any` to a [`UntypedHandle`]
     pub fn downcast_handle_untyped(&self, handle: &dyn Any) -> Option<UntypedHandle> {
         (self.downcast_handle_untyped)(handle)
+    }
+
+    /// A way to go from a [`Handle<T>`] in an [`OwningPtr`] to a [`UntypedHandle`]
+    pub unsafe fn untyped_from_ptr(&self, ptr: OwningPtr) -> UntypedHandle {
+        (self.untyped_from_ptr)(ptr)
     }
 
     /// A way to go from a [`UntypedHandle`] to a [`Handle<T>`] in a `Box<dyn Reflect>`.
@@ -225,6 +234,10 @@ impl<A: Asset> FromType<Handle<A>> for ReflectHandle {
                 handle
                     .downcast_ref::<Handle<A>>()
                     .map(|h| h.clone().untyped())
+            },
+            untyped_from_ptr: |ptr: OwningPtr| {
+                let handle = unsafe { ptr.read::<Handle<A>>() };
+                handle.untyped()
             },
             typed: |handle: UntypedHandle| Box::new(handle.typed_debug_checked::<A>()),
         }
