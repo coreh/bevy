@@ -13,41 +13,40 @@ pub struct BrpRequest {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "request", content = "params")]
-#[serde(rename_all = "UPPERCASE")]
 pub enum BrpRequestContent {
     Ping,
-    Get {
+    GetEntity {
         entity: Entity,
         #[serde(default)]
         data: BrpQueryData,
         #[serde(default)]
         filter: BrpQueryFilter,
     },
-    Query {
+    QueryEntities {
         #[serde(default)]
         data: BrpQueryData,
         #[serde(default)]
         filter: BrpQueryFilter,
     },
-    Spawn {
+    SpawnEntity {
         components: BrpComponentMap,
     },
-    Destroy {
+    DestroyEntity {
         entity: Entity,
     },
-    Insert {
+    InsertComponent {
         entity: Entity,
         components: BrpComponentMap,
     },
-    Remove {
+    RemoveComponent {
         entity: Entity,
         components: BrpComponentNames,
     },
-    Reparent {
+    ReparentEntity {
         entity: Entity,
         parent: Entity,
     },
-    Poll {
+    PollEntities {
         #[serde(default)]
         data: BrpQueryData,
         #[serde(default)]
@@ -58,7 +57,7 @@ pub enum BrpRequestContent {
         name: BrpAssetName,
         handle: BrpSerializedData,
     },
-    UpdateAsset {
+    InsertAsset {
         name: BrpAssetName,
         handle: BrpSerializedData,
         asset: BrpSerializedData,
@@ -145,13 +144,13 @@ pub enum BrpResponseContent {
     #[serde(rename = "OK")]
     Ok,
     Error(BrpError),
-    Get {
+    GetEntity {
         entity: BrpQueryResult,
     },
-    Query {
+    QueryEntities {
         entities: BrpQueryResults,
     },
-    Spawn {
+    SpawnEntity {
         entity: Entity,
     },
     Poll {

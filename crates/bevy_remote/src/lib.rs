@@ -161,16 +161,16 @@ fn process_brp_request(
 ) -> Result<BrpResponse, BrpError> {
     match request.request {
         BrpRequestContent::Ping => Ok(BrpResponse::new(request.id, BrpResponseContent::Ok)),
-        BrpRequestContent::Get {
+        BrpRequestContent::GetEntity {
             entity,
             ref data,
             ref filter,
         } => process_brp_get_request(world, session, request.id, data, filter, entity),
-        BrpRequestContent::Query {
+        BrpRequestContent::QueryEntities {
             ref data,
             ref filter,
         } => process_brp_query_request(world, session, request.id, data, filter),
-        BrpRequestContent::Insert {
+        BrpRequestContent::InsertComponent {
             ref entity,
             ref components,
         } => process_brp_insert_request(world, session, request.id, entity, components),
@@ -178,7 +178,7 @@ fn process_brp_request(
             ref name,
             ref handle,
         } => process_brp_get_asset_request(world, session, request.id, name, handle),
-        BrpRequestContent::UpdateAsset {
+        BrpRequestContent::InsertAsset {
             ref name,
             ref handle,
             ref asset,
@@ -200,7 +200,7 @@ fn process_brp_get_request(
 
     match query_response {
         Ok(BrpResponse {
-            response: BrpResponseContent::Query { mut entities },
+            response: BrpResponseContent::QueryEntities { mut entities },
             ..
         }) => {
             if entities.len() != 1 {
@@ -209,7 +209,7 @@ fn process_brp_get_request(
 
             Ok(BrpResponse::new(
                 id,
-                BrpResponseContent::Get {
+                BrpResponseContent::GetEntity {
                     entity: entities.pop().unwrap(),
                 },
             ))
@@ -379,7 +379,7 @@ fn process_brp_get_or_query_request(
 
     Ok(BrpResponse::new(
         id,
-        BrpResponseContent::Query { entities: results },
+        BrpResponseContent::QueryEntities { entities: results },
     ))
 }
 
