@@ -1,9 +1,12 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    any::TypeId,
+    sync::{Arc, RwLock},
+};
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
 use bevy_asset::{ReflectAsset, ReflectHandle};
 use bevy_ecs::{
-    component::{ComponentId, ComponentInfo},
+    component::ComponentId,
     entity::Entity,
     ptr::Ptr,
     query::QueryBuilder,
@@ -16,9 +19,9 @@ use bevy_log::{debug, warn};
 use bevy_reflect::{
     serde::{ReflectSerializer, TypedReflectDeserializer},
     std_traits::ReflectDefault,
-    Reflect, ReflectFromPtr, TypeRegistry,
+    Reflect, ReflectFromPtr,
 };
-use bevy_utils::hashbrown::{HashMap, HashSet};
+use bevy_utils::hashbrown::HashMap;
 use brp::*;
 use crossbeam_channel::{Receiver, Sender};
 use serde::de::DeserializeSeed;
@@ -43,7 +46,6 @@ impl Plugin for RemotePlugin {
         app.add_systems(Remote, process_brp_sessions);
 
         app.insert_resource(RemoteSessions::default());
-        app.insert_resource(RemoteCache::default());
 
         #[cfg(feature = "http")]
         app.add_plugins(http::HttpRemotePlugin);
@@ -71,81 +73,6 @@ pub enum RemoteComponentFormat {
     Json,
     Json5,
     Ron,
-}
-
-#[derive(Debug, Clone, Resource, Default)]
-pub struct RemoteCache(Arc<RwLock<RemoteCacheInternal>>);
-
-impl RemoteCache {
-    pub fn update_components<'a>(
-        &self,
-        world: &mut World,
-        component_names: impl IntoIterator<Item = &'a str>,
-    ) {
-        let mut internal = self.0.write().unwrap();
-        let mut missing_components = HashSet::<String>::new();
-
-        for component_name in component_names {
-            if !(*internal).components_by_name.contains_key(component_name)
-                && !(*internal)
-                    .components_by_short_name
-                    .contains_key(component_name)
-            {
-                missing_components.insert(component_name.to_string());
-            }
-        }
-
-        if missing_components.is_empty() {
-            // Bail early if we don't need to update anything
-            return;
-        }
-
-        for component in world.components().iter() {
-            let name = component.name();
-            let short_name = bevy_utils::get_short_name(name);
-
-            if missing_components.contains(name) || missing_components.contains(&short_name) {
-                (*internal)
-                    .components_by_name
-                    .insert(name.to_string(), component.clone());
-
-                if (*internal)
-                    .components_by_short_name
-                    .contains_key(&short_name)
-                {
-                    (*internal).ambiguous_short_names.insert(short_name.clone());
-                }
-
-                (*internal)
-                    .components_by_short_name
-                    .insert(short_name, component.clone());
-            }
-        }
-    }
-
-    pub fn component_by_name(&self, name: &str) -> Result<ComponentInfo, BrpError> {
-        let internal = self.0.read().unwrap();
-        if let Some(component) = (*internal).components_by_name.get(name) {
-            return Ok(component.clone());
-        }
-
-        if (*internal).ambiguous_short_names.contains(name) {
-            return Err(BrpError::ComponentAmbiguous(name.to_string()));
-        }
-
-        if let Some(component) = (*internal).components_by_short_name.get(name) {
-            return Ok(component.clone());
-        }
-
-        Err(BrpError::ComponentNotFound(name.to_string()))
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct RemoteCacheInternal {
-    pub components_by_name: HashMap<String, ComponentInfo>,
-    pub components_by_short_name: HashMap<String, ComponentInfo>,
-    pub ambiguous_short_names: HashSet<String>,
 }
 
 impl RemoteSessions {
@@ -309,66 +236,50 @@ fn process_brp_get_or_query_request(
     filter: &BrpQueryFilter,
     entity: Option<Entity>,
 ) -> Result<BrpResponse, BrpError> {
-    let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
-
-    let remote_cache = world.resource::<RemoteCache>().clone();
-
-    remote_cache.update_components(
-        world,
-        data.components
-            .iter()
-            .chain(data.optional.iter())
-            .chain(data.has.iter())
-            .chain(filter.with.iter())
-            .chain(filter.without.iter())
-            .chain(filter.when.iter())
-            .map(|component_name| component_name.as_str()),
-    );
-
     let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
 
     let fetch_all_components = data.components.len() == 1 && data.components[0] == "*";
 
     if !fetch_all_components {
         for component_name in &data.components {
-            builder.ref_id(remote_cache.component_by_name(&component_name)?.id());
+            builder.ref_id(component_id_for_name(builder.world(), component_name)?);
         }
     }
 
     for component_name in &data.optional {
-        let component = remote_cache.component_by_name(&component_name)?;
+        let component_id = component_id_for_name(builder.world(), component_name)?;
         builder.optional(|query| {
-            query.ref_id(component.id());
+            query.ref_id(component_id);
         });
     }
 
     for component_name in &data.has {
-        let component = remote_cache.component_by_name(&component_name)?;
+        let component_id = component_id_for_name(builder.world(), component_name)?;
         builder.optional(|query| {
-            query.ref_id(component.id());
+            query.ref_id(component_id);
         });
     }
 
     for component_name in &filter.with {
-        builder.with_id(remote_cache.component_by_name(&component_name)?.id());
+        let component_id = component_id_for_name(builder.world(), component_name)?;
+        builder.with_id(component_id);
     }
 
     for component_name in &filter.without {
-        builder.without_id(remote_cache.component_by_name(&component_name)?.id());
+        let component_id = component_id_for_name(builder.world(), component_name)?;
+        builder.without_id(component_id);
     }
 
     for component_name in filter.when.iter() {
-        let component = remote_cache.component_by_name(&component_name)?;
+        let component_id = component_id_for_name(builder.world(), component_name)?;
         builder.optional(|query| {
-            query.ref_id(component.id());
+            query.ref_id(component_id);
         });
     }
 
     let mut query = builder.build();
 
     let mut results = BrpQueryResults::default();
-
-    let type_registry = &*type_registry_arc.read();
 
     let (mut _1, mut _2);
     let entities: &mut dyn Iterator<Item = FilteredEntityRef> = if let Some(entity) = entity {
@@ -380,15 +291,7 @@ fn process_brp_get_or_query_request(
     };
 
     for entity in entities {
-        if !process_brp_predicate(
-            world,
-            session,
-            id,
-            &entity,
-            &type_registry,
-            &remote_cache,
-            &filter.when,
-        )? {
+        if !process_brp_predicate(world, session, id, &entity, &filter.when)? {
             continue;
         }
 
@@ -401,15 +304,12 @@ fn process_brp_get_or_query_request(
 
         if !fetch_all_components {
             for component_name in &data.components {
-                let component = remote_cache.component_by_name(&component_name)?;
-
                 result.components.insert(
                     component_name.clone(),
                     serialize_component(
+                        world,
                         &AnyEntityRef::FilteredEntityRef(&entity),
-                        &type_registry,
                         component_name,
-                        &component,
                         session,
                     )?,
                 );
@@ -417,16 +317,14 @@ fn process_brp_get_or_query_request(
         }
 
         for component_name in &data.optional {
-            let component = remote_cache.component_by_name(&component_name)?;
-
+            let component_id = component_id_for_name(world, component_name)?;
             result.optional.insert(
                 component_name.clone(),
-                if entity.contains_id(component.id()) {
+                if entity.contains_id(component_id) {
                     Some(serialize_component(
+                        world,
                         &AnyEntityRef::FilteredEntityRef(&entity),
-                        &type_registry,
                         component_name,
-                        &component,
                         session,
                     )?)
                 } else {
@@ -436,11 +334,11 @@ fn process_brp_get_or_query_request(
         }
 
         for component_name in &data.has {
-            let component = remote_cache.component_by_name(&component_name)?;
+            let component_id = component_id_for_name(world, component_name)?;
 
             result
                 .has
-                .insert(component_name.clone(), entity.contains_id(component.id()));
+                .insert(component_name.clone(), entity.contains_id(component_id));
         }
 
         results.push(result);
@@ -454,10 +352,9 @@ fn process_brp_get_or_query_request(
                 let component_name = component.name().to_string();
                 if entity.contains_id(component_id) {
                     match serialize_component(
+                        world,
                         &AnyEntityRef::EntityRef(&entity),
-                        &type_registry,
                         &component_name,
-                        component,
                         session,
                     ) {
                         Ok(serialized) => {
@@ -486,28 +383,46 @@ fn process_brp_get_or_query_request(
     ))
 }
 
+fn type_and_component_id_for_name(
+    world: &World,
+    component_name: &String,
+) -> Result<(TypeId, ComponentId), BrpError> {
+    let registry = world.resource::<AppTypeRegistry>().read();
+
+    let type_id = registry
+        .get_with_type_path(component_name)
+        .or_else(|| registry.get_with_short_type_path(component_name))
+        .ok_or_else(|| BrpError::MissingTypeRegistration(component_name.clone()))?
+        .type_id();
+
+    let component_id = world
+        .components()
+        .get_id(type_id)
+        .ok_or_else(|| BrpError::MissingComponentId(component_name.clone()))?;
+
+    Ok((type_id, component_id))
+}
+
+fn type_id_for_name(world: &World, component_name: &String) -> Result<TypeId, BrpError> {
+    Ok(type_and_component_id_for_name(world, component_name)?.0)
+}
+
+fn component_id_for_name(world: &World, component_name: &String) -> Result<ComponentId, BrpError> {
+    Ok(type_and_component_id_for_name(world, component_name)?.1)
+}
+
 fn process_brp_predicate(
     world: &World,
     session: &RemoteSession,
     id: BrpId,
     entity: &FilteredEntityRef<'_>,
-    type_registry: &TypeRegistry,
-    remote_cache: &RemoteCache,
     predicate: &BrpPredicate,
 ) -> Result<bool, BrpError> {
     match predicate {
         BrpPredicate::Always => Ok(true),
         BrpPredicate::All(predicates) => {
             for predicate in predicates.iter() {
-                if !process_brp_predicate(
-                    world,
-                    session,
-                    id,
-                    entity,
-                    type_registry,
-                    remote_cache,
-                    predicate,
-                )? {
+                if !process_brp_predicate(world, session, id, entity, predicate)? {
                     return Ok(false);
                 }
             }
@@ -515,41 +430,18 @@ fn process_brp_predicate(
         }
         BrpPredicate::Any(predicates) => {
             for predicate in predicates.iter() {
-                if process_brp_predicate(
-                    world,
-                    session,
-                    id,
-                    entity,
-                    type_registry,
-                    remote_cache,
-                    predicate,
-                )? {
+                if process_brp_predicate(world, session, id, entity, predicate)? {
                     return Ok(true);
                 }
             }
             Ok(false)
         }
         BrpPredicate::Not(predicate) => Ok(!process_brp_predicate(
-            world,
-            session,
-            id,
-            entity,
-            type_registry,
-            remote_cache,
-            predicate,
+            world, session, id, entity, predicate,
         )?),
         BrpPredicate::PartialEq(components) => {
             for (component_name, component_value) in components.iter() {
-                let component = remote_cache.component_by_name(&component_name)?;
-
-                if !partial_eq_component(
-                    entity,
-                    &type_registry,
-                    component_name,
-                    &component,
-                    component_value,
-                    session,
-                )? {
+                if !partial_eq_component(world, entity, component_name, component_value, session)? {
                     return Ok(false);
                 }
             }
@@ -565,35 +457,12 @@ fn process_brp_insert_request(
     entity: &Entity,
     components: &HashMap<BrpComponentName, BrpSerializedData>,
 ) -> Result<BrpResponse, BrpError> {
-    let remote_cache = world.resource::<RemoteCache>().clone();
-    let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
-
-    remote_cache.update_components(
-        world,
-        components
-            .keys()
-            .map(|component_name| component_name.as_str()),
-    );
-
     let Some(mut entity) = world.get_entity_mut(*entity) else {
         return Err(BrpError::EntityNotFound);
     };
 
-    let type_registry = &*type_registry_arc.read();
-
     for (component_name, component) in components.iter() {
-        debug!("Trying to find component {:?}", component_name);
-        let component_info = remote_cache.component_by_name(&component_name)?;
-        debug!("Found component {:?}", component_info);
-
-        insert_component(
-            &mut entity,
-            &type_registry,
-            component_name,
-            &component_info,
-            component,
-            session,
-        )?
+        insert_component(&mut entity, component_name, component, session)?
     }
 
     Ok(BrpResponse::new(id, BrpResponseContent::Ok))
@@ -614,16 +483,13 @@ impl<'w> AnyEntityRef<'w> {
 }
 
 fn serialize_component(
+    world: &World,
     entity: &AnyEntityRef<'_>,
-    type_registry: &TypeRegistry,
     component_name: &BrpComponentName,
-    component: &ComponentInfo,
     session: &RemoteSession,
 ) -> Result<BrpSerializedData, BrpError> {
-    let component_id = component.id();
-    let Some(type_id) = component.type_id() else {
-        return Err(BrpError::MissingTypeId(component_name.clone()));
-    };
+    let type_registry = world.resource::<AppTypeRegistry>().read();
+    let (type_id, component_id) = type_and_component_id_for_name(world, component_name)?;
     let type_registration = type_registry.get(type_id);
     let Some(type_registration) = type_registration else {
         return Err(BrpError::MissingTypeRegistration(component_name.clone()));
@@ -666,39 +532,36 @@ fn serialize_component(
 
 fn insert_component(
     entity: &mut EntityWorldMut<'_>,
-    type_registry: &TypeRegistry,
     component_name: &BrpComponentName,
-    component: &ComponentInfo,
     input: &BrpSerializedData,
     session: &RemoteSession,
 ) -> Result<(), BrpError> {
-    let Some(type_id) = component.type_id() else {
-        return Err(BrpError::MissingTypeId(component_name.clone()));
+    let (reflect_component, reflect) = {
+        let world = entity.world();
+        let type_id = type_id_for_name(world, component_name)?;
+        let type_registry = world.resource::<AppTypeRegistry>().read();
+        let type_registration = type_registry.get(type_id);
+        let Some(type_registration) = type_registration else {
+            return Err(BrpError::MissingTypeRegistration(component_name.clone()));
+        };
+
+        let reflected =
+            deserialize_component(world, type_registration, input, session, component_name)?;
+
+        let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+            return Err(BrpError::MissingDefault(component_name.clone()));
+        };
+
+        let Some(reflect_component) = type_registration.data::<ReflectComponent>() else {
+            return Err(BrpError::MissingReflect(component_name.clone()));
+        };
+
+        let mut reflect = reflect_default.default();
+
+        reflect.apply(&*reflected);
+
+        (reflect_component.clone(), reflect)
     };
-    let type_registration = type_registry.get(type_id);
-    let Some(type_registration) = type_registration else {
-        return Err(BrpError::MissingTypeRegistration(component_name.clone()));
-    };
-
-    let reflected = deserialize_component(
-        type_registration,
-        type_registry,
-        input,
-        session,
-        component_name,
-    )?;
-
-    let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-        return Err(BrpError::MissingDefault(component_name.clone()));
-    };
-
-    let Some(reflect_component) = type_registration.data::<ReflectComponent>() else {
-        return Err(BrpError::MissingReflect(component_name.clone()));
-    };
-
-    let mut reflect = reflect_default.default();
-
-    reflect.apply(&*reflected);
 
     reflect_component.insert(entity, &*reflect);
 
@@ -706,12 +569,13 @@ fn insert_component(
 }
 
 fn deserialize_component(
+    world: &World,
     type_registration: &bevy_reflect::TypeRegistration,
-    type_registry: &TypeRegistry,
     input: &BrpSerializedData,
     session: &RemoteSession,
     component_name: &String,
 ) -> Result<Box<dyn Reflect>, BrpError> {
+    let type_registry = world.resource::<AppTypeRegistry>().read();
     let reflect_deserializer = TypedReflectDeserializer::new(&type_registration, &type_registry);
     let reflected = match input {
         BrpSerializedData::Json(string) => {
@@ -776,17 +640,14 @@ fn deserialize_component(
 }
 
 fn partial_eq_component(
+    world: &World,
     entity: &FilteredEntityRef<'_>,
-    type_registry: &TypeRegistry,
     component_name: &BrpComponentName,
-    component: &ComponentInfo,
     input: &BrpSerializedData,
     session: &RemoteSession,
 ) -> Result<bool, BrpError> {
-    let component_id = component.id();
-    let Some(type_id) = component.type_id() else {
-        return Err(BrpError::MissingTypeId(component_name.clone()));
-    };
+    let type_registry = world.resource::<AppTypeRegistry>().read();
+    let (type_id, component_id) = type_and_component_id_for_name(world, component_name)?;
     let type_registration = type_registry.get(type_id);
     let Some(type_registration) = type_registration else {
         return Err(BrpError::MissingTypeRegistration(component_name.clone()));
@@ -795,13 +656,8 @@ fn partial_eq_component(
         return Err(BrpError::MissingReflect(component_name.clone()));
     };
 
-    let reflected = deserialize_component(
-        type_registration,
-        type_registry,
-        input,
-        session,
-        component_name,
-    )?;
+    let reflected =
+        deserialize_component(world, type_registration, input, session, component_name)?;
 
     // SAFETY: We got the `ComponentId`, `TypeId` and `Layout` from the same `ComponentInfo` so the
     // representations are compatible. We hand over the owning pointer to the world entity
@@ -817,7 +673,7 @@ fn partial_eq_component(
         // TODO: Figure out if there's a way to make both orders give matching results
         match reflected.reflect_partial_eq(reflect) {
             Some(r) => Ok(r),
-            None => Err(BrpError::MissingPartialEq(component.name().to_string())),
+            None => Err(BrpError::MissingPartialEq(component_name.clone())),
         }
     }
 }
@@ -830,18 +686,10 @@ fn process_brp_get_asset_request(
     handle: &BrpSerializedData,
 ) -> Result<BrpResponse, BrpError> {
     let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
-    let remote_cache = world.resource::<RemoteCache>().clone();
 
     let type_registry = &*type_registry_arc.read();
 
-    remote_cache.update_components(world, [name.as_str()].iter().cloned());
-
-    let asset = remote_cache.component_by_name(name)?;
-
-    let Some(type_id) = asset.type_id() else {
-        return Err(BrpError::MissingTypeId(name.clone()));
-    };
-    let Some(type_registration) = type_registry.get(type_id) else {
+    let Some(type_registration) = type_registry.get_with_type_path(name) else {
         return Err(BrpError::MissingTypeRegistration(name.clone()));
     };
 
@@ -857,7 +705,7 @@ fn process_brp_get_asset_request(
         return Err(BrpError::MissingTypeRegistration(name.clone()));
     };
 
-    let reflected = deserialize_component(type_registration, type_registry, handle, session, name)?;
+    let reflected = deserialize_component(world, type_registration, handle, session, name)?;
 
     let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
         return Err(BrpError::MissingDefault(name.clone()));
@@ -908,18 +756,10 @@ fn process_brp_update_asset_request(
     data: &BrpSerializedData,
 ) -> Result<BrpResponse, BrpError> {
     let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
-    let remote_cache = world.resource::<RemoteCache>().clone();
 
     let type_registry = &*type_registry_arc.read();
 
-    remote_cache.update_components(world, [name.as_str()].iter().cloned());
-
-    let asset = remote_cache.component_by_name(name)?;
-
-    let Some(type_id) = asset.type_id() else {
-        return Err(BrpError::MissingTypeId(name.clone()));
-    };
-    let Some(type_registration) = type_registry.get(type_id) else {
+    let Some(type_registration) = type_registry.get_with_type_path(name) else {
         return Err(BrpError::MissingTypeRegistration(name.clone()));
     };
 
@@ -937,7 +777,7 @@ fn process_brp_update_asset_request(
         return Err(BrpError::MissingTypeRegistration(name.clone()));
     };
 
-    let reflected = deserialize_component(type_registration, type_registry, handle, session, name)?;
+    let reflected = deserialize_component(world, type_registration, handle, session, name)?;
 
     let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
         return Err(BrpError::MissingDefault(name.clone()));
@@ -950,13 +790,8 @@ fn process_brp_update_asset_request(
         .downcast_handle_untyped(reflect.as_any())
         .unwrap();
 
-    let asset_reflected = deserialize_component(
-        asset_type_registration,
-        type_registry,
-        data,
-        session,
-        &asset_name,
-    )?;
+    let asset_reflected =
+        deserialize_component(world, asset_type_registration, data, session, &asset_name)?;
 
     reflect_asset.insert(world, untyped_handle, &*asset_reflected);
 

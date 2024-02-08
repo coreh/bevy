@@ -185,6 +185,7 @@ pub enum BrpError {
     ComponentAmbiguous(String),
     ComponentInvalidAccess(String),
     MissingTypeId(String),
+    MissingComponentId(String),
     MissingTypeRegistration(String),
     MissingReflect(String),
     MissingDefault(String),
