@@ -536,10 +536,11 @@ fn insert_component(
     input: &BrpSerializedData,
     session: &RemoteSession,
 ) -> Result<(), BrpError> {
-    let (reflect_component, reflect) = {
+    let (reflect_component, reflect, type_registry_arc) = {
         let world = entity.world();
         let type_id = type_id_for_name(world, component_name)?;
-        let type_registry = world.resource::<AppTypeRegistry>().read();
+        let type_registry_arc = world.resource::<AppTypeRegistry>();
+        let type_registry = type_registry_arc.read();
         let type_registration = type_registry.get(type_id);
         let Some(type_registration) = type_registration else {
             return Err(BrpError::MissingTypeRegistration(component_name.clone()));
@@ -560,10 +561,14 @@ fn insert_component(
 
         reflect.apply(&*reflected);
 
-        (reflect_component.clone(), reflect)
+        (
+            reflect_component.clone(),
+            reflect,
+            type_registry_arc.clone(),
+        )
     };
 
-    reflect_component.insert(entity, &*reflect);
+    reflect_component.insert(entity, &*reflect, &*type_registry_arc.read());
 
     Ok(())
 }
