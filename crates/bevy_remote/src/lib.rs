@@ -1,3 +1,10 @@
+//! Allows Bevy to communicate with remote clients over a network or other transports.
+//!
+//! Currently, the following transports are supported:
+//!
+//! - HTTP (via the `http` feature)
+//! - WASM (enabled by default on the `wasm32-unknown-unknown` target)
+
 use std::{
     any::TypeId,
     sync::{Arc, RwLock},
