@@ -129,68 +129,70 @@ pub struct Remote;
 fn process_brp_sessions(world: &mut World) {
     let sessions = (*world.resource::<RemoteSessions>()).clone();
     for session in sessions.0.read().unwrap().iter() {
-        process_brp_session(world, session);
+        session.process(world);
     }
 }
 
-fn process_brp_session(world: &mut World, session: &RemoteSession) {
-    loop {
-        let request = match session.request_receiver.try_recv() {
-            Ok(request) => request,
-            Err(err) => match err {
-                crossbeam_channel::TryRecvError::Empty => break, // no more requests for now
-                crossbeam_channel::TryRecvError::Disconnected => {
-                    panic!("BRP request channel disconnected")
+impl RemoteSession {
+    fn process(&self, world: &mut World) {
+        loop {
+            let request = match self.request_receiver.try_recv() {
+                Ok(request) => request,
+                Err(err) => match err {
+                    crossbeam_channel::TryRecvError::Empty => break, // no more requests for now
+                    crossbeam_channel::TryRecvError::Disconnected => {
+                        panic!("BRP request channel disconnected")
+                    }
+                },
+            };
+
+            let response = match self.process_request(world, &request) {
+                Ok(response) => response,
+                Err(err) => BrpResponse::from_error(request.id, err),
+            };
+
+            match self.response_sender.send(response) {
+                Ok(_) => {}
+                Err(err) => {
+                    panic!("BRP response channel disconnected: {:?}", err)
                 }
-            },
-        };
-
-        let response = match process_brp_request(world, &session, &request) {
-            Ok(response) => response,
-            Err(err) => BrpResponse::from_error(request.id, err),
-        };
-
-        match session.response_sender.send(response) {
-            Ok(_) => {}
-            Err(err) => {
-                panic!("BRP response channel disconnected: {:?}", err)
             }
+
+            debug!("Received {:?} from session {:?}", request, self.label);
         }
-
-        debug!("Received {:?} from session {:?}", request, session.label);
     }
-}
 
-fn process_brp_request(
-    world: &mut World,
-    session: &RemoteSession,
-    request: &BrpRequest,
-) -> Result<BrpResponse, BrpError> {
-    match request.request {
-        BrpRequestContent::Ping => Ok(BrpResponse::new(request.id, BrpResponseContent::Ok)),
-        BrpRequestContent::GetEntity {
-            entity,
-            ref data,
-            ref filter,
-        } => process_brp_get_request(world, session, request.id, data, filter, entity),
-        BrpRequestContent::QueryEntities {
-            ref data,
-            ref filter,
-        } => process_brp_query_request(world, session, request.id, data, filter),
-        BrpRequestContent::InsertComponent {
-            ref entity,
-            ref components,
-        } => process_brp_insert_request(world, session, request.id, entity, components),
-        BrpRequestContent::GetAsset {
-            ref name,
-            ref handle,
-        } => process_brp_get_asset_request(world, session, request.id, name, handle),
-        BrpRequestContent::InsertAsset {
-            ref name,
-            ref handle,
-            ref asset,
-        } => process_brp_update_asset_request(world, session, request.id, name, handle, asset),
-        _ => Err(BrpError::Unimplemented),
+    fn process_request(
+        &self,
+        world: &mut World,
+        request: &BrpRequest,
+    ) -> Result<BrpResponse, BrpError> {
+        match request.request {
+            BrpRequestContent::Ping => Ok(BrpResponse::new(request.id, BrpResponseContent::Ok)),
+            BrpRequestContent::GetEntity {
+                entity,
+                ref data,
+                ref filter,
+            } => process_brp_get_request(world, self, request.id, data, filter, entity),
+            BrpRequestContent::QueryEntities {
+                ref data,
+                ref filter,
+            } => process_brp_query_request(world, self, request.id, data, filter),
+            BrpRequestContent::InsertComponent {
+                ref entity,
+                ref components,
+            } => process_brp_insert_request(world, self, request.id, entity, components),
+            BrpRequestContent::GetAsset {
+                ref name,
+                ref handle,
+            } => process_brp_get_asset_request(world, self, request.id, name, handle),
+            BrpRequestContent::InsertAsset {
+                ref name,
+                ref handle,
+                ref asset,
+            } => process_brp_update_asset_request(world, self, request.id, name, handle, asset),
+            _ => Err(BrpError::Unimplemented),
+        }
     }
 }
 
