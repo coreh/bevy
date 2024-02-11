@@ -26,7 +26,7 @@ use bevy_log::{debug, warn};
 use bevy_reflect::{
     serde::{ReflectSerializer, TypedReflectDeserializer},
     std_traits::ReflectDefault,
-    Reflect, ReflectFromPtr,
+    Reflect, ReflectFromPtr, TypeRegistry,
 };
 use bevy_utils::hashbrown::HashMap;
 use brp::*;
@@ -604,26 +604,11 @@ impl BrpSerializedData {
         // discard it.
         // The `FilteredEntityRef` guarantees that we hold the proper access to the
         // data.
-        let output = unsafe {
+        unsafe {
             let reflect = reflect_from_ptr.as_reflect(component_ptr);
-            let serializer = ReflectSerializer::new(reflect, &type_registry);
-            match serialization_format {
-                RemoteSerializationFormat::Ron => BrpSerializedData::Ron(
-                    ron::ser::to_string(&serializer)
-                        .map_err(|e| BrpError::Serialization(e.to_string()))?,
-                ),
-                RemoteSerializationFormat::Json5 => BrpSerializedData::Json5(
-                    json5::to_string(&serializer)
-                        .map_err(|e| BrpError::Serialization(e.to_string()))?,
-                ),
-                RemoteSerializationFormat::Json => BrpSerializedData::Json(
-                    serde_json::ser::to_string(&serializer)
-                        .map_err(|e| BrpError::Serialization(e.to_string()))?,
-                ),
-            }
-        };
 
-        Ok(output)
+            Self::try_from_reflect(reflect, &*type_registry, serialization_format)
+        }
     }
 
     fn try_from_asset(
@@ -672,8 +657,16 @@ impl BrpSerializedData {
             return Err(BrpError::AssetNotFound(name.clone()));
         };
 
-        let serializer = ReflectSerializer::new(asset_reflect, &type_registry);
-        let output = match serialization_format {
+        Self::try_from_reflect(asset_reflect, type_registry, serialization_format)
+    }
+
+    fn try_from_reflect(
+        reflect: &dyn Reflect,
+        type_registry: &TypeRegistry,
+        serialization_format: RemoteSerializationFormat,
+    ) -> Result<BrpSerializedData, BrpError> {
+        let serializer = ReflectSerializer::new(reflect, type_registry);
+        Ok(match serialization_format {
             RemoteSerializationFormat::Ron => BrpSerializedData::Ron(
                 ron::ser::to_string(&serializer)
                     .map_err(|e| BrpError::Serialization(e.to_string()))?,
@@ -686,9 +679,7 @@ impl BrpSerializedData {
                 serde_json::ser::to_string(&serializer)
                     .map_err(|e| BrpError::Serialization(e.to_string()))?,
             ),
-        };
-
-        Ok(output)
+        })
     }
 
     fn try_partial_eq_entity_component(
