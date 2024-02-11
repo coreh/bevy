@@ -314,7 +314,7 @@ impl RemoteSession {
                 for component_name in &data.components {
                     result.components.insert(
                         component_name.clone(),
-                        serialize_component(
+                        BrpSerializedData::try_from_entity_component(
                             world,
                             &AnyEntityRef::FilteredEntityRef(&entity),
                             component_name,
@@ -329,7 +329,7 @@ impl RemoteSession {
                 result.optional.insert(
                     component_name.clone(),
                     if entity.contains_id(component_id) {
-                        Some(serialize_component(
+                        Some(BrpSerializedData::try_from_entity_component(
                             world,
                             &AnyEntityRef::FilteredEntityRef(&entity),
                             component_name,
@@ -359,7 +359,7 @@ impl RemoteSession {
                     let component_id = component.id();
                     let component_name = component.name().to_string();
                     if entity.contains_id(component_id) {
-                        match serialize_component(
+                        match BrpSerializedData::try_from_entity_component(
                             world,
                             &AnyEntityRef::EntityRef(&entity),
                             &component_name,
@@ -615,54 +615,6 @@ impl<'w> AnyEntityRef<'w> {
     }
 }
 
-fn serialize_component(
-    world: &World,
-    entity: &AnyEntityRef<'_>,
-    component_name: &BrpComponentName,
-    session: &RemoteSession,
-) -> Result<BrpSerializedData, BrpError> {
-    let type_registry = world.resource::<AppTypeRegistry>().read();
-    let (type_id, component_id) = type_and_component_id_for_name(world, component_name)?;
-    let type_registration = type_registry.get(type_id);
-    let Some(type_registration) = type_registration else {
-        return Err(BrpError::MissingTypeRegistration(component_name.clone()));
-    };
-    let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
-        return Err(BrpError::MissingReflect(component_name.clone()));
-    };
-    let Some(component_ptr) = entity.get_by_id(component_id) else {
-        return Err(BrpError::ComponentInvalidAccess(component_name.clone()));
-    };
-
-    // SAFETY: We got the `ComponentId` and `TypeId` from the same `ComponentInfo` so the
-    // `TypeRegistration`, `ReflectFromPtr` and `&dyn Reflect` are all for the same type,
-    // with the same memory layout.
-    // We don't keep the `&dyn Reflect` we obtain around, we immediately serialize it and
-    // discard it.
-    // The `FilteredEntityRef` guarantees that we hold the proper access to the
-    // data.
-    let output = unsafe {
-        let reflect = reflect_from_ptr.as_reflect(component_ptr);
-        let serializer = ReflectSerializer::new(reflect, &type_registry);
-        match session.component_format {
-            RemoteComponentFormat::Ron => BrpSerializedData::Ron(
-                ron::ser::to_string(&serializer)
-                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
-            ),
-            RemoteComponentFormat::Json5 => BrpSerializedData::Json5(
-                json5::to_string(&serializer)
-                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
-            ),
-            RemoteComponentFormat::Json => BrpSerializedData::Json(
-                serde_json::ser::to_string(&serializer)
-                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
-            ),
-        }
-    };
-
-    Ok(output)
-}
-
 fn insert_component(
     entity: &mut EntityWorldMut<'_>,
     component_name: &BrpComponentName,
@@ -813,5 +765,55 @@ fn partial_eq_component(
             Some(r) => Ok(r),
             None => Err(BrpError::MissingPartialEq(component_name.clone())),
         }
+    }
+}
+
+impl BrpSerializedData {
+    fn try_from_entity_component(
+        world: &World,
+        entity: &AnyEntityRef<'_>,
+        component_name: &BrpComponentName,
+        session: &RemoteSession,
+    ) -> Result<BrpSerializedData, BrpError> {
+        let type_registry = world.resource::<AppTypeRegistry>().read();
+        let (type_id, component_id) = type_and_component_id_for_name(world, component_name)?;
+        let type_registration = type_registry.get(type_id);
+        let Some(type_registration) = type_registration else {
+            return Err(BrpError::MissingTypeRegistration(component_name.clone()));
+        };
+        let Some(reflect_from_ptr) = type_registration.data::<ReflectFromPtr>() else {
+            return Err(BrpError::MissingReflect(component_name.clone()));
+        };
+        let Some(component_ptr) = entity.get_by_id(component_id) else {
+            return Err(BrpError::ComponentInvalidAccess(component_name.clone()));
+        };
+
+        // SAFETY: We got the `ComponentId` and `TypeId` from the same `ComponentInfo` so the
+        // `TypeRegistration`, `ReflectFromPtr` and `&dyn Reflect` are all for the same type,
+        // with the same memory layout.
+        // We don't keep the `&dyn Reflect` we obtain around, we immediately serialize it and
+        // discard it.
+        // The `FilteredEntityRef` guarantees that we hold the proper access to the
+        // data.
+        let output = unsafe {
+            let reflect = reflect_from_ptr.as_reflect(component_ptr);
+            let serializer = ReflectSerializer::new(reflect, &type_registry);
+            match session.component_format {
+                RemoteComponentFormat::Ron => BrpSerializedData::Ron(
+                    ron::ser::to_string(&serializer)
+                        .map_err(|e| BrpError::Serialization(e.to_string()))?,
+                ),
+                RemoteComponentFormat::Json5 => BrpSerializedData::Json5(
+                    json5::to_string(&serializer)
+                        .map_err(|e| BrpError::Serialization(e.to_string()))?,
+                ),
+                RemoteComponentFormat::Json => BrpSerializedData::Json(
+                    serde_json::ser::to_string(&serializer)
+                        .map_err(|e| BrpError::Serialization(e.to_string()))?,
+                ),
+            }
+        };
+
+        Ok(output)
     }
 }
