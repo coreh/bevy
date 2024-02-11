@@ -173,223 +173,365 @@ impl RemoteSession {
                 entity,
                 ref data,
                 ref filter,
-            } => process_brp_get_request(world, self, request.id, data, filter, entity),
+            } => self.process_get_entity_request(world, request.id, data, filter, entity),
             BrpRequestContent::QueryEntities {
                 ref data,
                 ref filter,
-            } => process_brp_query_request(world, self, request.id, data, filter),
+            } => self.process_query_request(world, request.id, data, filter),
             BrpRequestContent::InsertComponent {
                 ref entity,
                 ref components,
-            } => process_brp_insert_request(world, self, request.id, entity, components),
+            } => self.process_insert_request(world, request.id, entity, components),
             BrpRequestContent::GetAsset {
                 ref name,
                 ref handle,
-            } => process_brp_get_asset_request(world, self, request.id, name, handle),
+            } => self.process_get_asset_request(world, request.id, name, handle),
             BrpRequestContent::InsertAsset {
                 ref name,
                 ref handle,
                 ref asset,
-            } => process_brp_update_asset_request(world, self, request.id, name, handle, asset),
+            } => self.process_insert_asset_request(world, request.id, name, handle, asset),
             _ => Err(BrpError::Unimplemented),
         }
     }
-}
 
-fn process_brp_get_request(
-    world: &mut World,
-    session: &RemoteSession,
-    id: BrpId,
-    data: &BrpQueryData,
-    filter: &BrpQueryFilter,
-    entity: Entity,
-) -> Result<BrpResponse, BrpError> {
-    let query_response =
-        process_brp_get_or_query_request(world, session, id, data, filter, Some(entity));
+    fn process_get_entity_request(
+        &self,
+        world: &mut World,
+        id: BrpId,
+        data: &BrpQueryData,
+        filter: &BrpQueryFilter,
+        entity: Entity,
+    ) -> Result<BrpResponse, BrpError> {
+        let query_response =
+            self.process_get_or_query_request(world, id, data, filter, Some(entity));
 
-    match query_response {
-        Ok(BrpResponse {
-            response: BrpResponseContent::QueryEntities { mut entities },
-            ..
-        }) => {
-            if entities.len() != 1 {
-                return Err(BrpError::EntityNotFound);
+        match query_response {
+            Ok(BrpResponse {
+                response: BrpResponseContent::QueryEntities { mut entities },
+                ..
+            }) => {
+                if entities.len() != 1 {
+                    return Err(BrpError::EntityNotFound);
+                }
+
+                Ok(BrpResponse::new(
+                    id,
+                    BrpResponseContent::GetEntity {
+                        entity: entities.pop().unwrap(),
+                    },
+                ))
             }
-
-            Ok(BrpResponse::new(
-                id,
-                BrpResponseContent::GetEntity {
-                    entity: entities.pop().unwrap(),
-                },
-            ))
-        }
-        other => other,
-    }
-}
-
-fn process_brp_query_request(
-    world: &mut World,
-    session: &RemoteSession,
-    id: BrpId,
-    data: &BrpQueryData,
-    filter: &BrpQueryFilter,
-) -> Result<BrpResponse, BrpError> {
-    process_brp_get_or_query_request(world, session, id, data, filter, None)
-}
-
-fn process_brp_get_or_query_request(
-    world: &mut World,
-    session: &RemoteSession,
-    id: BrpId,
-    data: &BrpQueryData,
-    filter: &BrpQueryFilter,
-    entity: Option<Entity>,
-) -> Result<BrpResponse, BrpError> {
-    let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
-
-    let fetch_all_components = data.components.len() == 1 && data.components[0] == "*";
-
-    if !fetch_all_components {
-        for component_name in &data.components {
-            builder.ref_id(component_id_for_name(builder.world(), component_name)?);
+            other => other,
         }
     }
 
-    for component_name in &data.optional {
-        let component_id = component_id_for_name(builder.world(), component_name)?;
-        builder.optional(|query| {
-            query.ref_id(component_id);
-        });
+    fn process_query_request(
+        &self,
+        world: &mut World,
+        id: BrpId,
+        data: &BrpQueryData,
+        filter: &BrpQueryFilter,
+    ) -> Result<BrpResponse, BrpError> {
+        self.process_get_or_query_request(world, id, data, filter, None)
     }
 
-    for component_name in &data.has {
-        let component_id = component_id_for_name(builder.world(), component_name)?;
-        builder.optional(|query| {
-            query.ref_id(component_id);
-        });
-    }
+    fn process_get_or_query_request(
+        &self,
+        world: &mut World,
+        id: BrpId,
+        data: &BrpQueryData,
+        filter: &BrpQueryFilter,
+        entity: Option<Entity>,
+    ) -> Result<BrpResponse, BrpError> {
+        let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
 
-    for component_name in &filter.with {
-        let component_id = component_id_for_name(builder.world(), component_name)?;
-        builder.with_id(component_id);
-    }
-
-    for component_name in &filter.without {
-        let component_id = component_id_for_name(builder.world(), component_name)?;
-        builder.without_id(component_id);
-    }
-
-    for component_name in filter.when.iter() {
-        let component_id = component_id_for_name(builder.world(), component_name)?;
-        builder.optional(|query| {
-            query.ref_id(component_id);
-        });
-    }
-
-    let mut query = builder.build();
-
-    let mut results = BrpQueryResults::default();
-
-    let (mut _1, mut _2);
-    let entities: &mut dyn Iterator<Item = FilteredEntityRef> = if let Some(entity) = entity {
-        _1 = query.get(world, entity).into_iter();
-        &mut _1
-    } else {
-        _2 = query.iter(world).into_iter();
-        &mut _2
-    };
-
-    for entity in entities {
-        if !process_brp_predicate(world, session, id, &entity, &filter.when)? {
-            continue;
-        }
-
-        let mut result = BrpQueryResult {
-            entity: entity.id(),
-            components: HashMap::new(),
-            optional: HashMap::new(),
-            has: HashMap::new(),
-        };
+        let fetch_all_components = data.components.len() == 1 && data.components[0] == "*";
 
         if !fetch_all_components {
             for component_name in &data.components {
-                result.components.insert(
-                    component_name.clone(),
-                    serialize_component(
-                        world,
-                        &AnyEntityRef::FilteredEntityRef(&entity),
-                        component_name,
-                        session,
-                    )?,
-                );
+                builder.ref_id(component_id_for_name(builder.world(), component_name)?);
             }
         }
 
         for component_name in &data.optional {
-            let component_id = component_id_for_name(world, component_name)?;
-            result.optional.insert(
-                component_name.clone(),
-                if entity.contains_id(component_id) {
-                    Some(serialize_component(
-                        world,
-                        &AnyEntityRef::FilteredEntityRef(&entity),
-                        component_name,
-                        session,
-                    )?)
-                } else {
-                    None
-                },
-            );
+            let component_id = component_id_for_name(builder.world(), component_name)?;
+            builder.optional(|query| {
+                query.ref_id(component_id);
+            });
         }
 
         for component_name in &data.has {
-            let component_id = component_id_for_name(world, component_name)?;
-
-            result
-                .has
-                .insert(component_name.clone(), entity.contains_id(component_id));
+            let component_id = component_id_for_name(builder.world(), component_name)?;
+            builder.optional(|query| {
+                query.ref_id(component_id);
+            });
         }
 
-        results.push(result);
-    }
+        for component_name in &filter.with {
+            let component_id = component_id_for_name(builder.world(), component_name)?;
+            builder.with_id(component_id);
+        }
 
-    if fetch_all_components {
-        for result in &mut results {
-            let entity = world.entity(result.entity);
-            for component in world.components().iter() {
-                let component_id = component.id();
-                let component_name = component.name().to_string();
-                if entity.contains_id(component_id) {
-                    match serialize_component(
-                        world,
-                        &AnyEntityRef::EntityRef(&entity),
-                        &component_name,
-                        session,
-                    ) {
-                        Ok(serialized) => {
-                            result.components.insert(component_name, serialized);
+        for component_name in &filter.without {
+            let component_id = component_id_for_name(builder.world(), component_name)?;
+            builder.without_id(component_id);
+        }
+
+        for component_name in filter.when.iter() {
+            let component_id = component_id_for_name(builder.world(), component_name)?;
+            builder.optional(|query| {
+                query.ref_id(component_id);
+            });
+        }
+
+        let mut query = builder.build();
+
+        let mut results = BrpQueryResults::default();
+
+        let (mut _1, mut _2);
+        let entities: &mut dyn Iterator<Item = FilteredEntityRef> = if let Some(entity) = entity {
+            _1 = query.get(world, entity).into_iter();
+            &mut _1
+        } else {
+            _2 = query.iter(world).into_iter();
+            &mut _2
+        };
+
+        for entity in entities {
+            if !process_brp_predicate(world, self, id, &entity, &filter.when)? {
+                continue;
+            }
+
+            let mut result = BrpQueryResult {
+                entity: entity.id(),
+                components: HashMap::new(),
+                optional: HashMap::new(),
+                has: HashMap::new(),
+            };
+
+            if !fetch_all_components {
+                for component_name in &data.components {
+                    result.components.insert(
+                        component_name.clone(),
+                        serialize_component(
+                            world,
+                            &AnyEntityRef::FilteredEntityRef(&entity),
+                            component_name,
+                            self,
+                        )?,
+                    );
+                }
+            }
+
+            for component_name in &data.optional {
+                let component_id = component_id_for_name(world, component_name)?;
+                result.optional.insert(
+                    component_name.clone(),
+                    if entity.contains_id(component_id) {
+                        Some(serialize_component(
+                            world,
+                            &AnyEntityRef::FilteredEntityRef(&entity),
+                            component_name,
+                            self,
+                        )?)
+                    } else {
+                        None
+                    },
+                );
+            }
+
+            for component_name in &data.has {
+                let component_id = component_id_for_name(world, component_name)?;
+
+                result
+                    .has
+                    .insert(component_name.clone(), entity.contains_id(component_id));
+            }
+
+            results.push(result);
+        }
+
+        if fetch_all_components {
+            for result in &mut results {
+                let entity = world.entity(result.entity);
+                for component in world.components().iter() {
+                    let component_id = component.id();
+                    let component_name = component.name().to_string();
+                    if entity.contains_id(component_id) {
+                        match serialize_component(
+                            world,
+                            &AnyEntityRef::EntityRef(&entity),
+                            &component_name,
+                            self,
+                        ) {
+                            Ok(serialized) => {
+                                result.components.insert(component_name, serialized);
+                            }
+                            Err(
+                                BrpError::MissingTypeRegistration(_)
+                                | BrpError::MissingReflect(_)
+                                | BrpError::MissingTypeId(_)
+                                | BrpError::Serialization(_),
+                            ) => {
+                                result
+                                    .components
+                                    .insert(component_name, BrpSerializedData::Unserializable);
+                            }
+                            Err(err) => return Err(err),
                         }
-                        Err(
-                            BrpError::MissingTypeRegistration(_)
-                            | BrpError::MissingReflect(_)
-                            | BrpError::MissingTypeId(_)
-                            | BrpError::Serialization(_),
-                        ) => {
-                            result
-                                .components
-                                .insert(component_name, BrpSerializedData::Unserializable);
-                        }
-                        Err(err) => return Err(err),
                     }
                 }
             }
         }
+
+        Ok(BrpResponse::new(
+            id,
+            BrpResponseContent::QueryEntities { entities: results },
+        ))
     }
 
-    Ok(BrpResponse::new(
-        id,
-        BrpResponseContent::QueryEntities { entities: results },
-    ))
+    fn process_insert_request(
+        &self,
+        world: &mut World,
+        id: BrpId,
+        entity: &Entity,
+        components: &HashMap<BrpComponentName, BrpSerializedData>,
+    ) -> Result<BrpResponse, BrpError> {
+        let Some(mut entity) = world.get_entity_mut(*entity) else {
+            return Err(BrpError::EntityNotFound);
+        };
+
+        for (component_name, component) in components.iter() {
+            insert_component(&mut entity, component_name, component, self)?
+        }
+
+        Ok(BrpResponse::new(id, BrpResponseContent::Ok))
+    }
+
+    fn process_get_asset_request(
+        &self,
+        world: &mut World,
+        id: BrpId,
+        name: &BrpAssetName,
+        handle: &BrpSerializedData,
+    ) -> Result<BrpResponse, BrpError> {
+        let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
+
+        let type_registry = &*type_registry_arc.read();
+
+        let Some(type_registration) = type_registry.get_with_type_path(name) else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
+            return Err(BrpError::AssetNotFound(name.clone()));
+        };
+
+        let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id())
+        else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let reflected = deserialize_component(world, type_registration, handle, self, name)?;
+
+        let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+            return Err(BrpError::MissingDefault(name.clone()));
+        };
+
+        let mut reflect = reflect_default.default();
+
+        reflect.apply(&*reflected);
+
+        let untyped_handle = reflect_handle
+            .downcast_handle_untyped(reflect.as_any())
+            .unwrap();
+
+        let Some(asset_reflect) = reflect_asset.get(world, untyped_handle) else {
+            return Err(BrpError::AssetNotFound(name.clone()));
+        };
+
+        let serializer = ReflectSerializer::new(asset_reflect, &type_registry);
+        let output = match self.component_format {
+            RemoteComponentFormat::Ron => BrpSerializedData::Ron(
+                ron::ser::to_string(&serializer)
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
+            ),
+            RemoteComponentFormat::Json5 => BrpSerializedData::Json5(
+                json5::to_string(&serializer)
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
+            ),
+            RemoteComponentFormat::Json => BrpSerializedData::Json(
+                serde_json::ser::to_string(&serializer)
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
+            ),
+        };
+
+        Ok(BrpResponse::new(
+            id,
+            BrpResponseContent::GetAsset {
+                name: name.clone(),
+                handle: handle.clone(),
+                asset: output,
+            },
+        ))
+    }
+
+    fn process_insert_asset_request(
+        &self,
+        world: &mut World,
+        id: BrpId,
+        name: &BrpAssetName,
+        handle: &BrpSerializedData,
+        data: &BrpSerializedData,
+    ) -> Result<BrpResponse, BrpError> {
+        let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
+
+        let type_registry = &*type_registry_arc.read();
+
+        let Some(type_registration) = type_registry.get_with_type_path(name) else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
+            return Err(BrpError::AssetNotFound(name.clone()));
+        };
+
+        let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id())
+        else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let asset_name = asset_type_registration.type_info().type_path().to_string();
+
+        let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let reflected = deserialize_component(world, type_registration, handle, self, name)?;
+
+        let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+            return Err(BrpError::MissingDefault(name.clone()));
+        };
+
+        let mut reflect = reflect_default.default();
+        reflect.apply(&*reflected);
+
+        let untyped_handle = reflect_handle
+            .downcast_handle_untyped(reflect.as_any())
+            .unwrap();
+
+        let asset_reflected =
+            deserialize_component(world, asset_type_registration, data, self, &asset_name)?;
+
+        reflect_asset.insert(world, untyped_handle, &*asset_reflected);
+
+        Ok(BrpResponse::new(id, BrpResponseContent::Ok))
+    }
 }
 
 fn type_and_component_id_for_name(
@@ -457,24 +599,6 @@ fn process_brp_predicate(
             Ok(true)
         }
     }
-}
-
-fn process_brp_insert_request(
-    world: &mut World,
-    session: &RemoteSession,
-    id: BrpId,
-    entity: &Entity,
-    components: &HashMap<BrpComponentName, BrpSerializedData>,
-) -> Result<BrpResponse, BrpError> {
-    let Some(mut entity) = world.get_entity_mut(*entity) else {
-        return Err(BrpError::EntityNotFound);
-    };
-
-    for (component_name, component) in components.iter() {
-        insert_component(&mut entity, component_name, component, session)?
-    }
-
-    Ok(BrpResponse::new(id, BrpResponseContent::Ok))
 }
 
 enum AnyEntityRef<'a> {
@@ -690,124 +814,4 @@ fn partial_eq_component(
             None => Err(BrpError::MissingPartialEq(component_name.clone())),
         }
     }
-}
-
-fn process_brp_get_asset_request(
-    world: &mut World,
-    session: &RemoteSession,
-    id: BrpId,
-    name: &BrpAssetName,
-    handle: &BrpSerializedData,
-) -> Result<BrpResponse, BrpError> {
-    let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
-
-    let type_registry = &*type_registry_arc.read();
-
-    let Some(type_registration) = type_registry.get_with_type_path(name) else {
-        return Err(BrpError::MissingTypeRegistration(name.clone()));
-    };
-
-    let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
-        return Err(BrpError::AssetNotFound(name.clone()));
-    };
-
-    let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id()) else {
-        return Err(BrpError::MissingTypeRegistration(name.clone()));
-    };
-
-    let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
-        return Err(BrpError::MissingTypeRegistration(name.clone()));
-    };
-
-    let reflected = deserialize_component(world, type_registration, handle, session, name)?;
-
-    let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-        return Err(BrpError::MissingDefault(name.clone()));
-    };
-
-    let mut reflect = reflect_default.default();
-
-    reflect.apply(&*reflected);
-
-    let untyped_handle = reflect_handle
-        .downcast_handle_untyped(reflect.as_any())
-        .unwrap();
-
-    let Some(asset_reflect) = reflect_asset.get(world, untyped_handle) else {
-        return Err(BrpError::AssetNotFound(name.clone()));
-    };
-
-    let serializer = ReflectSerializer::new(asset_reflect, &type_registry);
-    let output = match session.component_format {
-        RemoteComponentFormat::Ron => BrpSerializedData::Ron(
-            ron::ser::to_string(&serializer).map_err(|e| BrpError::Serialization(e.to_string()))?,
-        ),
-        RemoteComponentFormat::Json5 => BrpSerializedData::Json5(
-            json5::to_string(&serializer).map_err(|e| BrpError::Serialization(e.to_string()))?,
-        ),
-        RemoteComponentFormat::Json => BrpSerializedData::Json(
-            serde_json::ser::to_string(&serializer)
-                .map_err(|e| BrpError::Serialization(e.to_string()))?,
-        ),
-    };
-
-    Ok(BrpResponse::new(
-        id,
-        BrpResponseContent::GetAsset {
-            name: name.clone(),
-            handle: handle.clone(),
-            asset: output,
-        },
-    ))
-}
-
-fn process_brp_update_asset_request(
-    world: &mut World,
-    session: &RemoteSession,
-    id: BrpId,
-    name: &BrpAssetName,
-    handle: &BrpSerializedData,
-    data: &BrpSerializedData,
-) -> Result<BrpResponse, BrpError> {
-    let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
-
-    let type_registry = &*type_registry_arc.read();
-
-    let Some(type_registration) = type_registry.get_with_type_path(name) else {
-        return Err(BrpError::MissingTypeRegistration(name.clone()));
-    };
-
-    let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
-        return Err(BrpError::AssetNotFound(name.clone()));
-    };
-
-    let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id()) else {
-        return Err(BrpError::MissingTypeRegistration(name.clone()));
-    };
-
-    let asset_name = asset_type_registration.type_info().type_path().to_string();
-
-    let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
-        return Err(BrpError::MissingTypeRegistration(name.clone()));
-    };
-
-    let reflected = deserialize_component(world, type_registration, handle, session, name)?;
-
-    let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-        return Err(BrpError::MissingDefault(name.clone()));
-    };
-
-    let mut reflect = reflect_default.default();
-    reflect.apply(&*reflected);
-
-    let untyped_handle = reflect_handle
-        .downcast_handle_untyped(reflect.as_any())
-        .unwrap();
-
-    let asset_reflected =
-        deserialize_component(world, asset_type_registration, data, session, &asset_name)?;
-
-    reflect_asset.insert(world, untyped_handle, &*asset_reflected);
-
-    Ok(BrpResponse::new(id, BrpResponseContent::Ok))
 }
