@@ -98,50 +98,6 @@ fn component_id_for_name(world: &World, component_name: &String) -> Result<Compo
     Ok(type_and_component_id_for_name(world, component_name)?.1)
 }
 
-fn process_brp_predicate(
-    world: &World,
-    session: &RemoteSession,
-    id: BrpId,
-    entity: &FilteredEntityRef<'_>,
-    predicate: &BrpPredicate,
-) -> Result<bool, BrpError> {
-    match predicate {
-        BrpPredicate::Always => Ok(true),
-        BrpPredicate::All(predicates) => {
-            for predicate in predicates.iter() {
-                if !process_brp_predicate(world, session, id, entity, predicate)? {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        }
-        BrpPredicate::Any(predicates) => {
-            for predicate in predicates.iter() {
-                if process_brp_predicate(world, session, id, entity, predicate)? {
-                    return Ok(true);
-                }
-            }
-            Ok(false)
-        }
-        BrpPredicate::Not(predicate) => Ok(!process_brp_predicate(
-            world, session, id, entity, predicate,
-        )?),
-        BrpPredicate::PartialEq(components) => {
-            for (component_name, component_value) in components.iter() {
-                if !component_value.try_partial_eq_entity_component(
-                    world,
-                    entity,
-                    component_name,
-                    session,
-                )? {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        }
-    }
-}
-
 enum AnyEntityRef<'a> {
     EntityRef(&'a EntityRef<'a>),
     FilteredEntityRef(&'a FilteredEntityRef<'a>),
@@ -266,7 +222,7 @@ impl BrpSerializedData {
         world: &World,
         entity: &FilteredEntityRef<'_>,
         component_name: &BrpComponentName,
-        session: &RemoteSession,
+        serialization_format: RemoteSerializationFormat,
     ) -> Result<bool, BrpError> {
         let type_registry = world.resource::<AppTypeRegistry>().read();
         let (type_id, component_id) = type_and_component_id_for_name(world, component_name)?;
@@ -282,7 +238,7 @@ impl BrpSerializedData {
             world,
             type_registration,
             component_name,
-            session.serialization_format,
+            serialization_format,
         )?;
 
         // SAFETY: We got the `ComponentId`, `TypeId` and `Layout` from the same `ComponentInfo` so the

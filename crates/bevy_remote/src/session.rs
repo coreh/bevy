@@ -14,8 +14,8 @@ use bevy_utils::HashMap;
 use crossbeam_channel::{Receiver, Sender};
 
 use crate::{
-    component_id_for_name, process_brp_predicate, AnyEntityRef, BrpAssetName, BrpComponentName,
-    BrpError, BrpId, BrpQueryData, BrpQueryFilter, BrpQueryResult, BrpQueryResults, BrpRequest,
+    component_id_for_name, AnyEntityRef, BrpAssetName, BrpComponentName, BrpError, BrpId,
+    BrpPredicate, BrpQueryData, BrpQueryFilter, BrpQueryResult, BrpQueryResults, BrpRequest,
     BrpRequestContent, BrpResponse, BrpResponseContent, BrpSerializedData,
     RemoteSerializationFormat,
 };
@@ -248,7 +248,7 @@ impl RemoteSession {
         };
 
         for entity in entities {
-            if !process_brp_predicate(world, self, id, &entity, &filter.when)? {
+            if !self.try_process_predicate(world, &entity, &filter.when)? {
                 continue;
             }
 
@@ -437,5 +437,48 @@ impl RemoteSession {
         reflect_asset.insert(world, untyped_handle, &*asset_reflected);
 
         Ok(BrpResponse::new(id, BrpResponseContent::Ok))
+    }
+
+    fn try_process_predicate(
+        &self,
+        world: &World,
+        entity: &FilteredEntityRef<'_>,
+        predicate: &BrpPredicate,
+    ) -> Result<bool, BrpError> {
+        match predicate {
+            BrpPredicate::Always => Ok(true),
+            BrpPredicate::All(predicates) => {
+                for predicate in predicates.iter() {
+                    if !self.try_process_predicate(world, entity, predicate)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            BrpPredicate::Any(predicates) => {
+                for predicate in predicates.iter() {
+                    if self.try_process_predicate(world, entity, predicate)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            BrpPredicate::Not(predicate) => {
+                Ok(!self.try_process_predicate(world, entity, predicate)?)
+            }
+            BrpPredicate::PartialEq(components) => {
+                for (component_name, component_value) in components.iter() {
+                    if !component_value.try_partial_eq_entity_component(
+                        world,
+                        entity,
+                        component_name,
+                        self.serialization_format,
+                    )? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+        }
     }
 }
