@@ -24,7 +24,7 @@ use bevy_reflect::{
 };
 use brp::*;
 use serde::de::DeserializeSeed;
-use session::{RemoteSession, RemoteSessions};
+use session::RemoteSessions;
 
 pub mod brp;
 pub mod session;

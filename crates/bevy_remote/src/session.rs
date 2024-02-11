@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[derive(Resource, Default, Clone)]
-pub struct RemoteSessions(pub(crate) Arc<RwLock<Vec<RemoteSession>>>);
+pub struct RemoteSessions(Arc<RwLock<Vec<RemoteSession>>>);
 
 #[derive(Debug, Clone)]
 pub struct RemoteSession {
