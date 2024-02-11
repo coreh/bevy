@@ -72,6 +72,14 @@ impl RemoteSessions {
 
         sessions.remove(index);
     }
+
+    pub(crate) fn process(&self, world: &mut World) {
+        let sessions = self.0.read().unwrap();
+
+        for session in sessions.iter() {
+            session.process(world);
+        }
+    }
 }
 
 impl RemoteSession {

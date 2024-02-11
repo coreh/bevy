@@ -67,10 +67,7 @@ pub enum RemoteSerializationFormat {
 pub struct Remote;
 
 fn process_brp_sessions(world: &mut World) {
-    let sessions = (*world.resource::<RemoteSessions>()).clone();
-    for session in sessions.0.read().unwrap().iter() {
-        session.process(world);
-    }
+    world.resource::<RemoteSessions>().clone().process(world);
 }
 
 fn type_and_component_id_for_name(
