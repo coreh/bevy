@@ -420,61 +420,8 @@ impl RemoteSession {
         name: &BrpAssetName,
         handle: &BrpSerializedData,
     ) -> Result<BrpResponse, BrpError> {
-        let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
-
-        let type_registry = &*type_registry_arc.read();
-
-        let Some(type_registration) = type_registry.get_with_type_path(name) else {
-            return Err(BrpError::MissingTypeRegistration(name.clone()));
-        };
-
-        let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
-            return Err(BrpError::AssetNotFound(name.clone()));
-        };
-
-        let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id())
-        else {
-            return Err(BrpError::MissingTypeRegistration(name.clone()));
-        };
-
-        let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
-            return Err(BrpError::MissingTypeRegistration(name.clone()));
-        };
-
-        let reflected =
-            handle.try_deserialize(world, type_registration, name, self.serialization_format)?;
-
-        let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-            return Err(BrpError::MissingDefault(name.clone()));
-        };
-
-        let mut reflect = reflect_default.default();
-
-        reflect.apply(&*reflected);
-
-        let untyped_handle = reflect_handle
-            .downcast_handle_untyped(reflect.as_any())
-            .unwrap();
-
-        let Some(asset_reflect) = reflect_asset.get(world, untyped_handle) else {
-            return Err(BrpError::AssetNotFound(name.clone()));
-        };
-
-        let serializer = ReflectSerializer::new(asset_reflect, &type_registry);
-        let output = match self.serialization_format {
-            RemoteSerializationFormat::Ron => BrpSerializedData::Ron(
-                ron::ser::to_string(&serializer)
-                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
-            ),
-            RemoteSerializationFormat::Json5 => BrpSerializedData::Json5(
-                json5::to_string(&serializer)
-                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
-            ),
-            RemoteSerializationFormat::Json => BrpSerializedData::Json(
-                serde_json::ser::to_string(&serializer)
-                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
-            ),
-        };
+        let output =
+            BrpSerializedData::try_from_asset(world, name, handle, self.serialization_format)?;
 
         Ok(BrpResponse::new(
             id,
@@ -674,6 +621,71 @@ impl BrpSerializedData {
                         .map_err(|e| BrpError::Serialization(e.to_string()))?,
                 ),
             }
+        };
+
+        Ok(output)
+    }
+
+    fn try_from_asset(
+        world: &World,
+        name: &BrpAssetName,
+        handle: &BrpSerializedData,
+        serialization_format: RemoteSerializationFormat,
+    ) -> Result<BrpSerializedData, BrpError> {
+        let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
+
+        let type_registry = &*type_registry_arc.read();
+
+        let Some(type_registration) = type_registry.get_with_type_path(name) else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let Some(reflect_handle) = type_registration.data::<ReflectHandle>() else {
+            return Err(BrpError::AssetNotFound(name.clone()));
+        };
+
+        let Some(asset_type_registration) = type_registry.get(reflect_handle.asset_type_id())
+        else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let Some(reflect_asset) = asset_type_registration.data::<ReflectAsset>() else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let reflected =
+            handle.try_deserialize(world, type_registration, name, serialization_format)?;
+
+        let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+            return Err(BrpError::MissingDefault(name.clone()));
+        };
+
+        let mut reflect = reflect_default.default();
+
+        reflect.apply(&*reflected);
+
+        let untyped_handle = reflect_handle
+            .downcast_handle_untyped(reflect.as_any())
+            .unwrap();
+
+        let Some(asset_reflect) = reflect_asset.get(world, untyped_handle) else {
+            return Err(BrpError::AssetNotFound(name.clone()));
+        };
+
+        let serializer = ReflectSerializer::new(asset_reflect, &type_registry);
+        let output = match serialization_format {
+            RemoteSerializationFormat::Ron => BrpSerializedData::Ron(
+                ron::ser::to_string(&serializer)
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
+            ),
+            RemoteSerializationFormat::Json5 => BrpSerializedData::Json5(
+                json5::to_string(&serializer)
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
+            ),
+            RemoteSerializationFormat::Json => BrpSerializedData::Json(
+                serde_json::ser::to_string(&serializer)
+                    .map_err(|e| BrpError::Serialization(e.to_string()))?,
+            ),
         };
 
         Ok(output)

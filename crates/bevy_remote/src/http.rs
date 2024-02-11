@@ -44,7 +44,7 @@ impl TryFrom<&rouille::Request> for BrpRequest {
 impl Plugin for HttpRemotePlugin {
     fn build(&self, app: &mut App) {
         let brp_sessions = app.world.get_resource::<RemoteSessions>().unwrap();
-        let brp_session = brp_sessions.open("HTTP", crate::RemoteComponentFormat::Json5);
+        let brp_session = brp_sessions.open("HTTP", crate::RemoteSerializationFormat::Json5);
         let request_sender = brp_session.request_sender.clone();
         let response_receiver = brp_session.response_receiver.clone();
         let response_loopback = brp_session.response_sender.clone();
