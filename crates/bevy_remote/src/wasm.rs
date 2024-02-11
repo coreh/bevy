@@ -66,7 +66,7 @@ impl Plugin for WasmRemotePlugin {
         WASM_REMOTE_SESSION.get_or_init(|| {
             app.world.insert_non_send_resource(());
             let brp_sessions = app.world.get_resource::<RemoteSessions>().unwrap();
-            brp_sessions.open("WASM", crate::RemoteComponentFormat::Json5)
+            brp_sessions.open("WASM", crate::RemoteSerializationFormat::Json5)
         });
 
         app.add_systems(Remote, process_brp_responses);
