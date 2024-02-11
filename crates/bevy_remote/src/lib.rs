@@ -68,15 +68,15 @@ pub struct RemoteSessions(Arc<RwLock<Vec<RemoteSession>>>);
 #[derive(Debug, Clone)]
 pub struct RemoteSession {
     pub label: String,
-    pub component_format: RemoteComponentFormat,
+    pub serialization_format: RemoteSerializationFormat,
     pub request_sender: Sender<BrpRequest>,
     pub request_receiver: Receiver<BrpRequest>,
     pub response_sender: Sender<BrpResponse>,
     pub response_receiver: Receiver<BrpResponse>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RemoteComponentFormat {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteSerializationFormat {
     Json,
     Json5,
     Ron,
@@ -86,14 +86,14 @@ impl RemoteSessions {
     pub fn open(
         &self,
         label: impl Into<String>,
-        component_format: RemoteComponentFormat,
+        serialization_format: RemoteSerializationFormat,
     ) -> RemoteSession {
         let (request_sender, request_receiver) = crossbeam_channel::unbounded();
         let (response_sender, response_receiver) = crossbeam_channel::unbounded();
 
         let session = RemoteSession {
             label: label.into(),
-            component_format,
+            serialization_format,
             request_sender,
             request_receiver,
             response_sender,
@@ -318,7 +318,7 @@ impl RemoteSession {
                             world,
                             &AnyEntityRef::FilteredEntityRef(&entity),
                             component_name,
-                            self,
+                            self.serialization_format,
                         )?,
                     );
                 }
@@ -333,7 +333,7 @@ impl RemoteSession {
                             world,
                             &AnyEntityRef::FilteredEntityRef(&entity),
                             component_name,
-                            self,
+                            self.serialization_format,
                         )?)
                     } else {
                         None
@@ -363,7 +363,7 @@ impl RemoteSession {
                             world,
                             &AnyEntityRef::EntityRef(&entity),
                             &component_name,
-                            self,
+                            self.serialization_format,
                         ) {
                             Ok(serialized) => {
                                 result.components.insert(component_name, serialized);
@@ -456,16 +456,16 @@ impl RemoteSession {
         };
 
         let serializer = ReflectSerializer::new(asset_reflect, &type_registry);
-        let output = match self.component_format {
-            RemoteComponentFormat::Ron => BrpSerializedData::Ron(
+        let output = match self.serialization_format {
+            RemoteSerializationFormat::Ron => BrpSerializedData::Ron(
                 ron::ser::to_string(&serializer)
                     .map_err(|e| BrpError::Serialization(e.to_string()))?,
             ),
-            RemoteComponentFormat::Json5 => BrpSerializedData::Json5(
+            RemoteSerializationFormat::Json5 => BrpSerializedData::Json5(
                 json5::to_string(&serializer)
                     .map_err(|e| BrpError::Serialization(e.to_string()))?,
             ),
-            RemoteComponentFormat::Json => BrpSerializedData::Json(
+            RemoteSerializationFormat::Json => BrpSerializedData::Json(
                 serde_json::ser::to_string(&serializer)
                     .map_err(|e| BrpError::Serialization(e.to_string()))?,
             ),
@@ -669,7 +669,7 @@ fn deserialize_component(
     let reflect_deserializer = TypedReflectDeserializer::new(&type_registration, &type_registry);
     let reflected = match input {
         BrpSerializedData::Json(string) => {
-            if session.component_format != RemoteComponentFormat::Json {
+            if session.serialization_format != RemoteSerializationFormat::Json {
                 warn!("Received component in JSON format, but session is not set to JSON. Accepting anyway.");
             }
             let mut deserializer = serde_json::de::Deserializer::from_str(&string);
@@ -684,7 +684,7 @@ fn deserialize_component(
             }
         }
         BrpSerializedData::Json5(string) => {
-            if session.component_format != RemoteComponentFormat::Json5 {
+            if session.serialization_format != RemoteSerializationFormat::Json5 {
                 warn!("Received component in JSON5 format, but session is not set to JSON5. Accepting anyway.");
             }
             let mut deserializer = json5::Deserializer::from_str(&string).unwrap();
@@ -699,7 +699,7 @@ fn deserialize_component(
             }
         }
         BrpSerializedData::Ron(string) => {
-            if session.component_format != RemoteComponentFormat::Ron {
+            if session.serialization_format != RemoteSerializationFormat::Ron {
                 warn!("Received component in RON format, but session is not set to RON. Accepting anyway.");
             }
             let mut deserializer = ron::de::Deserializer::from_str(&string).unwrap();
@@ -773,7 +773,7 @@ impl BrpSerializedData {
         world: &World,
         entity: &AnyEntityRef<'_>,
         component_name: &BrpComponentName,
-        session: &RemoteSession,
+        serialization_format: RemoteSerializationFormat,
     ) -> Result<BrpSerializedData, BrpError> {
         let type_registry = world.resource::<AppTypeRegistry>().read();
         let (type_id, component_id) = type_and_component_id_for_name(world, component_name)?;
@@ -798,16 +798,16 @@ impl BrpSerializedData {
         let output = unsafe {
             let reflect = reflect_from_ptr.as_reflect(component_ptr);
             let serializer = ReflectSerializer::new(reflect, &type_registry);
-            match session.component_format {
-                RemoteComponentFormat::Ron => BrpSerializedData::Ron(
+            match serialization_format {
+                RemoteSerializationFormat::Ron => BrpSerializedData::Ron(
                     ron::ser::to_string(&serializer)
                         .map_err(|e| BrpError::Serialization(e.to_string()))?,
                 ),
-                RemoteComponentFormat::Json5 => BrpSerializedData::Json5(
+                RemoteSerializationFormat::Json5 => BrpSerializedData::Json5(
                     json5::to_string(&serializer)
                         .map_err(|e| BrpError::Serialization(e.to_string()))?,
                 ),
-                RemoteComponentFormat::Json => BrpSerializedData::Json(
+                RemoteSerializationFormat::Json => BrpSerializedData::Json(
                     serde_json::ser::to_string(&serializer)
                         .map_err(|e| BrpError::Serialization(e.to_string()))?,
                 ),
