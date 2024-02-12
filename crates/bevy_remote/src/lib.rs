@@ -91,17 +91,3 @@ fn type_id_for_name(world: &World, component_name: &String) -> Result<TypeId, Br
 fn component_id_for_name(world: &World, component_name: &String) -> Result<ComponentId, BrpError> {
     Ok(type_and_component_id_for_name(world, component_name)?.1)
 }
-
-enum AnyEntityRef<'a> {
-    EntityRef(&'a EntityRef<'a>),
-    FilteredEntityRef(&'a FilteredEntityRef<'a>),
-}
-
-impl<'w> AnyEntityRef<'w> {
-    fn get_by_id(&self, id: ComponentId) -> Option<Ptr<'w>> {
-        match self {
-            AnyEntityRef::EntityRef(entity) => entity.get_by_id(id),
-            AnyEntityRef::FilteredEntityRef(entity) => entity.get_by_id(id),
-        }
-    }
-}

@@ -12,14 +12,14 @@ use bevy_reflect::{
 use serde::de::DeserializeSeed;
 
 use crate::{
-    type_and_component_id_for_name, type_id_for_name, AnyEntityRef, BrpAssetName, BrpComponentName,
-    BrpError, BrpSerializedData, RemoteSerializationFormat,
+    type_and_component_id_for_name, type_id_for_name, BrpAssetName, BrpComponentName, BrpError,
+    BrpSerializedData, RemoteSerializationFormat,
 };
 
 impl BrpSerializedData {
     pub(crate) fn try_from_entity_component(
         world: &World,
-        entity: &AnyEntityRef<'_>,
+        entity: &FilteredEntityRef<'_>,
         component_name: &BrpComponentName,
         serialization_format: RemoteSerializationFormat,
     ) -> Result<BrpSerializedData, BrpError> {

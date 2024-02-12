@@ -14,10 +14,9 @@ use bevy_utils::HashMap;
 use crossbeam_channel::{Receiver, Sender};
 
 use crate::{
-    component_id_for_name, AnyEntityRef, BrpAssetName, BrpComponentName, BrpError, BrpId,
-    BrpPredicate, BrpQueryData, BrpQueryFilter, BrpQueryResult, BrpQueryResults, BrpRequest,
-    BrpRequestContent, BrpResponse, BrpResponseContent, BrpSerializedData,
-    RemoteSerializationFormat,
+    component_id_for_name, BrpAssetName, BrpComponentName, BrpError, BrpId, BrpPredicate,
+    BrpQueryData, BrpQueryFilter, BrpQueryResult, BrpQueryResults, BrpRequest, BrpRequestContent,
+    BrpResponse, BrpResponseContent, BrpSerializedData, RemoteSerializationFormat,
 };
 
 #[derive(Resource, Default, Clone)]
@@ -265,7 +264,7 @@ impl RemoteSession {
                         component_name.clone(),
                         BrpSerializedData::try_from_entity_component(
                             world,
-                            &AnyEntityRef::FilteredEntityRef(&entity),
+                            &entity,
                             component_name,
                             self.serialization_format,
                         )?,
@@ -280,7 +279,7 @@ impl RemoteSession {
                     if entity.contains_id(component_id) {
                         Some(BrpSerializedData::try_from_entity_component(
                             world,
-                            &AnyEntityRef::FilteredEntityRef(&entity),
+                            &entity,
                             component_name,
                             self.serialization_format,
                         )?)
@@ -310,7 +309,7 @@ impl RemoteSession {
                     if entity.contains_id(component_id) {
                         match BrpSerializedData::try_from_entity_component(
                             world,
-                            &AnyEntityRef::EntityRef(&entity),
+                            &entity.into(),
                             &component_name,
                             self.serialization_format,
                         ) {
