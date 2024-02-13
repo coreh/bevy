@@ -9,14 +9,10 @@ use std::any::TypeId;
 
 use bevy_app::{App, First, MainScheduleOrder, Plugin};
 use bevy_ecs::{
-    component::ComponentId,
-    ptr::Ptr,
-    reflect::AppTypeRegistry,
-    schedule::ScheduleLabel,
-    world::{EntityRef, FilteredEntityRef, World},
+    component::ComponentId, reflect::AppTypeRegistry, schedule::ScheduleLabel, world::World,
 };
 use brp::*;
-use session::RemoteSessions;
+pub use session::{RemoteSession, RemoteSessions};
 
 pub mod brp;
 pub mod session;
