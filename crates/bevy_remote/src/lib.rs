@@ -62,7 +62,13 @@ fn type_and_component_id_for_name(
     let type_id = registry
         .get_with_type_path(component_name)
         .or_else(|| registry.get_with_short_type_path(component_name))
-        .ok_or_else(|| BrpError::MissingTypeRegistration(component_name.clone()))?
+        .ok_or_else(|| {
+            if registry.is_ambiguous(component_name) {
+                BrpError::ComponentAmbiguous(component_name.clone())
+            } else {
+                BrpError::MissingTypeRegistration(component_name.clone())
+            }
+        })?
         .type_id();
 
     let component_id = world
