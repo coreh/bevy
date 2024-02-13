@@ -11,9 +11,10 @@ use bevy_reflect::{
 };
 use serde::de::DeserializeSeed;
 
+use crate::session::RemoteSerializationFormat;
 use crate::{
     type_and_component_id_for_name, type_id_for_name, BrpAssetName, BrpComponentName, BrpError,
-    BrpSerializedData, RemoteSerializationFormat,
+    BrpSerializedData,
 };
 
 impl BrpSerializedData {

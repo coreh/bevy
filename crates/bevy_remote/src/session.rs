@@ -16,7 +16,7 @@ use crossbeam_channel::{Receiver, Sender};
 use crate::{
     component_id_for_name, BrpAssetName, BrpComponentName, BrpError, BrpId, BrpPredicate,
     BrpQueryData, BrpQueryFilter, BrpQueryResult, BrpQueryResults, BrpRequest, BrpRequestContent,
-    BrpResponse, BrpResponseContent, BrpSerializedData, RemoteSerializationFormat,
+    BrpResponse, BrpResponseContent, BrpSerializedData,
 };
 
 #[derive(Resource, Default, Clone)]
@@ -30,6 +30,13 @@ pub struct RemoteSession {
     pub request_receiver: Receiver<BrpRequest>,
     pub response_sender: Sender<BrpResponse>,
     pub response_receiver: Receiver<BrpResponse>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteSerializationFormat {
+    Json,
+    Json5,
+    Ron,
 }
 
 impl RemoteSessions {

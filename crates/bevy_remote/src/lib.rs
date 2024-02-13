@@ -46,13 +46,6 @@ impl Plugin for RemotePlugin {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RemoteSerializationFormat {
-    Json,
-    Json5,
-    Ron,
-}
-
 #[derive(Debug, Hash, PartialEq, Eq, Clone, ScheduleLabel)]
 pub struct Remote;
 

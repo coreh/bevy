@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_wasm_bindgen::{from_value, Serializer};
 use wasm_bindgen::prelude::*;
 
+use crate::session::RemoteSerializationFormat;
 use crate::{BrpId, BrpRequest, BrpResponseContent, Remote, RemoteSession, RemoteSessions};
 
 static WASM_REMOTE_SESSION: OnceLock<RemoteSession> = OnceLock::new();
@@ -66,7 +67,7 @@ impl Plugin for WasmRemotePlugin {
         WASM_REMOTE_SESSION.get_or_init(|| {
             app.world.insert_non_send_resource(());
             let brp_sessions = app.world.get_resource::<RemoteSessions>().unwrap();
-            brp_sessions.open("WASM", crate::RemoteSerializationFormat::Json5)
+            brp_sessions.open("WASM", RemoteSerializationFormat::Json5)
         });
 
         app.add_systems(Remote, process_brp_responses);
