@@ -27,7 +27,7 @@ use crate::{
     query::{DebugCheckedUnwrap, QueryData, QueryEntityError, QueryFilter, QueryState},
     removal_detection::RemovedComponentEvents,
     schedule::{Schedule, ScheduleLabel, Schedules},
-    storage::{ResourceData, Storages},
+    storage::{ResourceData, Resources, Storages},
     system::{Res, Resource},
     world::error::TryRunScheduleError,
 };
@@ -2039,6 +2039,79 @@ impl World {
     pub fn clear_resources(&mut self) {
         self.storages.resources.clear();
         self.storages.non_send_resources.clear();
+    }
+
+    /// Iterates over all resources in the world
+    pub fn iter_resources(&self) -> impl Iterator<Item = (&ComponentInfo, Ptr<'_>)> {
+        self.iter_resources_internal(&self.storages.resources)
+    }
+
+    /// Mutably iterates over all resources in the world
+    pub fn iter_resources_mut(&mut self) -> impl Iterator<Item = (&ComponentInfo, MutUntyped<'_>)> {
+        // SAFETY: `&mut self` ensures that all accessed data is unaliased
+        unsafe { self.iter_resources_mut_internal(&self.storages.resources) }
+    }
+
+    /// Iterates over all `!Send` resources in the world that are accessible from the current thread.
+    ///
+    /// Resources that were inserted from a different thread are skipped.
+    pub fn iter_non_send(&self) -> impl Iterator<Item = (&ComponentInfo, Ptr<'_>)> {
+        self.iter_resources_internal(&self.storages.non_send_resources)
+    }
+
+    /// Mutably iterates over all `!Send` resources in the world that are accessible from the current thread.
+    ///
+    /// Resources that were inserted from a different thread are skipped.
+    pub fn iter_non_send_mut(&mut self) -> impl Iterator<Item = (&ComponentInfo, MutUntyped<'_>)> {
+        // SAFETY: `&mut self` ensures that all accessed data is unaliased
+        unsafe { self.iter_resources_mut_internal(&self.storages.non_send_resources) }
+    }
+
+    fn iter_resources_internal<'w, const SEND: bool>(
+        &'w self,
+        resources: &'w Resources<SEND>,
+    ) -> impl Iterator<Item = (&ComponentInfo, Ptr<'_>)> {
+        resources.iter().filter(|(_, data)| data.can_access()).map(|(component_id, data)| {
+            let component_info = self.components.get_info(component_id).unwrap_or_else(|| {
+                panic!("ComponentInfo should exist for all resources in the world, but it does not for {:?}", component_id);
+            });
+            let ptr = data.get_data().unwrap_or_else(|| {
+                panic!(
+                    "When iterating all resources, resource of type {} was supposed to exist, but did not.",
+                    component_info.name()
+                )
+            });
+            (component_info, ptr)
+        })
+    }
+
+    /// # Safety
+    /// - Caller must have exclusive access to the world
+    unsafe fn iter_resources_mut_internal<'w, const SEND: bool>(
+        &'w self,
+        resources: &'w Resources<SEND>,
+    ) -> impl Iterator<Item = (&ComponentInfo, MutUntyped<'_>)> {
+        resources.iter().filter(|(_, data)| data.can_access()).map(|(component_id, data)| {
+            let component_info = self.components.get_info(component_id).unwrap_or_else(|| {
+                panic!("ComponentInfo should exist for all resources in the world, but it does not for {:?}", component_id);
+            });
+
+            let (ptr, ticks) = data.get_with_ticks().unwrap_or_else(|| {
+                panic!(
+                    "When iterating all resources, resource of type {} was supposed to exist, but did not.",
+                    component_info.name()
+                )
+            });
+
+            let ticks = TicksMut::from_tick_cells(ticks, self.last_change_tick(), self.read_change_tick());
+
+            let mut_untyped = MutUntyped {
+                value: ptr.assert_unique(),
+                ticks,
+            };
+
+            (component_info, mut_untyped)
+        })
     }
 }
 
