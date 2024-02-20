@@ -134,6 +134,11 @@ impl PluginGroup for DefaultPlugins {
             group = group.add(bevy_gizmos::GizmoPlugin);
         }
 
+        #[cfg(feature = "bevy_remote")]
+        {
+            group = group.add(bevy_remote::RemotePlugin);
+        }
+
         group = group.add(IgnoreAmbiguitiesPlugin);
 
         group

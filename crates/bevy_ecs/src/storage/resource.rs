@@ -50,10 +50,7 @@ impl<const SEND: bool> ResourceData<SEND> {
     /// If `SEND` is false, this will panic if called from a different thread than the one it was inserted from.
     #[inline]
     fn validate_access(&self) {
-        if SEND {
-            return;
-        }
-        if self.origin_thread_id != Some(std::thread::current().id()) {
+        if !self.can_access() {
             // Panic in tests, as testing for aborting is nearly impossible
             panic!(
                 "Attempted to access or drop non-send resource {} from thread {:?} on a thread {:?}. This is not allowed. Aborting.",
@@ -62,6 +59,18 @@ impl<const SEND: bool> ResourceData<SEND> {
                 std::thread::current().id()
             );
         }
+    }
+
+    /// Returns whether the current thread can access a resource or not:
+    ///
+    /// - For `!Send` resources, this will return `true` if the current thread is the same as the one it was inserted from;
+    /// - For `Send` resources, this will always return `true`.
+    #[inline]
+    pub fn can_access(&self) -> bool {
+        if SEND {
+            return true;
+        }
+        self.origin_thread_id == Some(std::thread::current().id())
     }
 
     /// Returns true if the resource is populated.

@@ -66,6 +66,7 @@ default = [
   "bevy_sprite",
   "bevy_text",
   "bevy_ui",
+  "bevy_remote",
   "multi-threaded",
   "png",
   "hdr",
@@ -134,6 +135,12 @@ bevy_ui = [
   "bevy_text",
   "bevy_sprite",
 ]
+
+# Provides remote inspection functionality
+bevy_remote = ["serialize", "bevy_internal/bevy_remote"]
+
+# Provides remote inspection functionality over HTTP
+remote_http = ["bevy_remote", "bevy_internal/remote_http"]
 
 # winit window and input backend
 bevy_winit = ["bevy_internal/bevy_winit"]
@@ -2642,6 +2649,18 @@ name = "UI Material"
 description = "Demonstrates creating and using custom Ui materials"
 category = "UI (User Interface)"
 wasm = true
+
+[[example]]
+name = "remote_http"
+path = "examples/remote/http.rs"
+doc-scrape-examples = true
+required-features = ["remote_http"]
+
+[package.metadata.example.remote_http]
+name = "Remote via HTTP"
+description = "Demonstrate the use of the Remote plugin with HTTP"
+category = "Remote"
+wasm = false
 
 [[example]]
 name = "render_primitives"

@@ -137,6 +137,10 @@ bevy_text = ["dep:bevy_text", "bevy_ui?/bevy_text"]
 
 bevy_render = ["dep:bevy_render", "bevy_scene?/bevy_render"]
 
+bevy_remote = ["dep:bevy_remote"]
+
+remote_http = ["bevy_remote/http"]
+
 # Enable assertions to check the validity of parameters passed to glam
 glam_assert = ["bevy_math/glam_assert"]
 
@@ -197,6 +201,7 @@ bevy_ui = { path = "../bevy_ui", optional = true, version = "0.13.0" }
 bevy_winit = { path = "../bevy_winit", optional = true, version = "0.13.0" }
 bevy_gilrs = { path = "../bevy_gilrs", optional = true, version = "0.13.0" }
 bevy_gizmos = { path = "../bevy_gizmos", optional = true, version = "0.13.0", default-features = false }
+bevy_remote = { path = "../bevy_remote", optional = true, version = "0.13.0" }
 
 [lints]
 workspace = true
