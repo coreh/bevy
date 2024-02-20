@@ -1,6 +1,6 @@
 use bevy_asset::{ReflectAsset, ReflectHandle};
 use bevy_ecs::{
-    reflect::{AppTypeRegistry, ReflectComponent},
+    reflect::{AppTypeRegistry, ReflectComponent, ReflectResource},
     world::{EntityWorldMut, FilteredEntityRef, World},
 };
 use bevy_log::warn;
@@ -111,10 +111,12 @@ impl BrpSerializedData {
         let Some(type_registration) = type_registration else {
             return Err(BrpError::MissingTypeRegistration(name.clone()));
         };
-        let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
-            return Err(BrpError::MissingDefault(name.clone()));
+        let Some(reflect_resource) = type_registration.data::<ReflectResource>() else {
+            return Err(BrpError::MissingReflect(name.clone()));
         };
-        let reflect = reflect_default.default();
+        let Some(reflect) = reflect_resource.reflect(world) else {
+            return Err(BrpError::ResourceNotFound(name.clone()));
+        };
         Self::try_from_reflect(&*reflect, &*type_registry, serialization_format)
     }
 
