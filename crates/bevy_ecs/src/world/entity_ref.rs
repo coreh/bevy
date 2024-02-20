@@ -12,6 +12,7 @@ use crate::{
 use bevy_ptr::{OwningPtr, Ptr};
 use bevy_utils::tracing::debug;
 use std::{any::TypeId, marker::PhantomData};
+use thiserror::Error;
 
 use super::{unsafe_world_cell::UnsafeEntityCell, Ref};
 
@@ -190,53 +191,53 @@ impl<'a> From<&'a EntityMut<'_>> for EntityRef<'a> {
 }
 
 impl<'a> TryFrom<FilteredEntityRef<'a>> for EntityRef<'a> {
-    type Error = ();
+    type Error = TryFromFilteredError;
 
     fn try_from(value: FilteredEntityRef<'a>) -> Result<Self, Self::Error> {
-        if value.access.has_read_all() {
+        if !value.access.has_read_all() {
+            Err(TryFromFilteredError::MissingReadAllAccess)
+        } else {
             // SAFETY: check above guarantees read-only access to all components of the entity.
             Ok(unsafe { EntityRef::new(value.entity) })
-        } else {
-            Err(())
         }
     }
 }
 
 impl<'a> TryFrom<&'a FilteredEntityRef<'_>> for EntityRef<'a> {
-    type Error = ();
+    type Error = TryFromFilteredError;
 
     fn try_from(value: &'a FilteredEntityRef<'_>) -> Result<Self, Self::Error> {
-        if value.access.has_read_all() {
+        if !value.access.has_read_all() {
+            Err(TryFromFilteredError::MissingReadAllAccess)
+        } else {
             // SAFETY: check above guarantees read-only access to all components of the entity.
             Ok(unsafe { EntityRef::new(value.entity) })
-        } else {
-            Err(())
         }
     }
 }
 
 impl<'a> TryFrom<FilteredEntityMut<'a>> for EntityRef<'a> {
-    type Error = ();
+    type Error = TryFromFilteredError;
 
     fn try_from(value: FilteredEntityMut<'a>) -> Result<Self, Self::Error> {
-        if value.access.has_read_all() {
+        if !value.access.has_read_all() {
+            Err(TryFromFilteredError::MissingReadAllAccess)
+        } else {
             // SAFETY: check above guarantees read-only access to all components of the entity.
             Ok(unsafe { EntityRef::new(value.entity) })
-        } else {
-            Err(())
         }
     }
 }
 
 impl<'a> TryFrom<&'a FilteredEntityMut<'_>> for EntityRef<'a> {
-    type Error = ();
+    type Error = TryFromFilteredError;
 
     fn try_from(value: &'a FilteredEntityMut<'_>) -> Result<Self, Self::Error> {
-        if value.access.has_read_all() {
+        if !value.access.has_read_all() {
+            Err(TryFromFilteredError::MissingReadAllAccess)
+        } else {
             // SAFETY: check above guarantees read-only access to all components of the entity.
             Ok(unsafe { EntityRef::new(value.entity) })
-        } else {
-            Err(())
         }
     }
 }
@@ -428,27 +429,31 @@ impl<'a> From<&'a mut EntityWorldMut<'_>> for EntityMut<'a> {
 }
 
 impl<'a> TryFrom<FilteredEntityMut<'a>> for EntityMut<'a> {
-    type Error = ();
+    type Error = TryFromFilteredError;
 
     fn try_from(value: FilteredEntityMut<'a>) -> Result<Self, Self::Error> {
-        if value.access.has_read_all() && value.access.has_write_all() {
+        if !value.access.has_read_all() {
+            Err(TryFromFilteredError::MissingReadAllAccess)
+        } else if !value.access.has_write_all() {
+            Err(TryFromFilteredError::MissingWriteAllAccess)
+        } else {
             // SAFETY: check above guarantees exclusive access to all components of the entity.
             Ok(unsafe { EntityMut::new(value.entity) })
-        } else {
-            Err(())
         }
     }
 }
 
 impl<'a> TryFrom<&'a mut FilteredEntityMut<'_>> for EntityMut<'a> {
-    type Error = ();
+    type Error = TryFromFilteredError;
 
     fn try_from(value: &'a mut FilteredEntityMut<'_>) -> Result<Self, Self::Error> {
-        if value.access.has_read_all() && value.access.has_write_all() {
+        if !value.access.has_read_all() {
+            Err(TryFromFilteredError::MissingReadAllAccess)
+        } else if !value.access.has_write_all() {
+            Err(TryFromFilteredError::MissingWriteAllAccess)
+        } else {
             // SAFETY: check above guarantees exclusive access to all components of the entity.
             Ok(unsafe { EntityMut::new(value.entity) })
-        } else {
-            Err(())
         }
     }
 }
@@ -1663,9 +1668,7 @@ impl<'w> FilteredEntityRef<'w> {
     /// Returns `None` if the entity does not have a component of type `T`.
     #[inline]
     pub fn get<T: Component>(&self) -> Option<&'w T> {
-        let Some(id) = self.entity.world().components().get_id(TypeId::of::<T>()) else {
-            return None;
-        };
+        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
         self.access
             .has_read(id)
             // SAFETY: We have read access so we must have the component
@@ -1678,9 +1681,7 @@ impl<'w> FilteredEntityRef<'w> {
     /// Returns `None` if the entity does not have a component of type `T`.
     #[inline]
     pub fn get_ref<T: Component>(&self) -> Option<Ref<'w, T>> {
-        let Some(id) = self.entity.world().components().get_id(TypeId::of::<T>()) else {
-            return None;
-        };
+        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
         self.access
             .has_read(id)
             // SAFETY: We have read access so we must have the component
@@ -1691,9 +1692,7 @@ impl<'w> FilteredEntityRef<'w> {
     /// detection in custom runtimes.
     #[inline]
     pub fn get_change_ticks<T: Component>(&self) -> Option<ComponentTicks> {
-        let Some(id) = self.entity.world().components().get_id(TypeId::of::<T>()) else {
-            return None;
-        };
+        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
         self.access
             .has_read(id)
             // SAFETY: We have read access so we must have the component
@@ -1939,9 +1938,7 @@ impl<'w> FilteredEntityMut<'w> {
     /// Returns `None` if the entity does not have a component of type `T`.
     #[inline]
     pub fn get_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
-        let Some(id) = self.entity.world().components().get_id(TypeId::of::<T>()) else {
-            return None;
-        };
+        let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
         self.access
             .has_write(id)
             // SAFETY: We have write access so we must have the component
@@ -2048,6 +2045,15 @@ impl<'a> From<&'a mut EntityWorldMut<'_>> for FilteredEntityMut<'a> {
             FilteredEntityMut::new(entity.as_unsafe_entity_cell(), access)
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum TryFromFilteredError {
+    #[error("Conversion failed, filtered entity ref does not have read access to all components")]
+    MissingReadAllAccess,
+
+    #[error("Conversion failed, filtered entity ref does not have write access to all components")]
+    MissingWriteAllAccess,
 }
 
 /// Inserts a dynamic [`Bundle`] into the entity.
