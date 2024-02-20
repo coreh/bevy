@@ -11,7 +11,7 @@ use bevy_reflect::{
 };
 use serde::de::DeserializeSeed;
 
-use crate::session::RemoteSerializationFormat;
+use crate::{session::RemoteSerializationFormat, BrpResourceName};
 use crate::{
     type_and_component_id_for_name, type_id_for_name, BrpAssetName, BrpComponentName, BrpError,
     BrpSerializedData,
@@ -98,6 +98,24 @@ impl BrpSerializedData {
         };
 
         Self::try_from_reflect(asset_reflect, type_registry, serialization_format)
+    }
+
+    pub(crate) fn try_from_resource(
+        world: &World,
+        name: &BrpResourceName,
+        serialization_format: RemoteSerializationFormat,
+    ) -> Result<BrpSerializedData, BrpError> {
+        let type_registry = world.resource::<AppTypeRegistry>().read();
+        let type_id = type_id_for_name(world, name)?;
+        let type_registration = type_registry.get(type_id);
+        let Some(type_registration) = type_registration else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+        let Some(reflect_default) = type_registration.data::<ReflectDefault>() else {
+            return Err(BrpError::MissingDefault(name.clone()));
+        };
+        let reflect = reflect_default.default();
+        Self::try_from_reflect(&*reflect, &*type_registry, serialization_format)
     }
 
     pub(crate) fn try_from_reflect(

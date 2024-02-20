@@ -4,7 +4,7 @@ use bevy_asset::{ReflectAsset, ReflectHandle};
 use bevy_ecs::{
     entity::Entity,
     query::QueryBuilder,
-    reflect::AppTypeRegistry,
+    reflect::{AppTypeRegistry, ReflectResource},
     system::Resource,
     world::{FilteredEntityRef, World},
 };
@@ -16,7 +16,7 @@ use crossbeam_channel::{Receiver, Sender};
 use crate::{
     component_id_for_name, BrpAssetName, BrpComponentName, BrpError, BrpId, BrpPredicate,
     BrpQueryData, BrpQueryFilter, BrpQueryResult, BrpQueryResults, BrpRequest, BrpRequestContent,
-    BrpResponse, BrpResponseContent, BrpSerializedData,
+    BrpResourceName, BrpResponse, BrpResponseContent, BrpSerializedData,
 };
 
 #[derive(Resource, Default, Clone)]
@@ -146,6 +146,13 @@ impl RemoteSession {
                 ref handle,
                 ref asset,
             } => self.process_insert_asset_request(world, request.id, name, handle, asset),
+            BrpRequestContent::GetResource { ref name } => {
+                self.process_get_resource_request(world, request.id, name)
+            }
+            BrpRequestContent::InsertResource {
+                ref name,
+                ref resource,
+            } => self.process_insert_resource_request(world, request.id, name, resource),
             _ => Err(BrpError::Unimplemented),
         }
     }
@@ -441,6 +448,49 @@ impl RemoteSession {
         )?;
 
         reflect_asset.insert(world, untyped_handle, &*asset_reflected);
+
+        Ok(BrpResponse::new(id, BrpResponseContent::Ok))
+    }
+
+    fn process_get_resource_request(
+        &self,
+        world: &mut World,
+        id: BrpId,
+        name: &BrpResourceName,
+    ) -> Result<BrpResponse, BrpError> {
+        let serialized =
+            BrpSerializedData::try_from_resource(world, name, self.serialization_format)?;
+
+        Ok(BrpResponse::new(
+            id,
+            BrpResponseContent::GetResource {
+                name: name.clone(),
+                resource: serialized,
+            },
+        ))
+    }
+
+    fn process_insert_resource_request(
+        &self,
+        world: &mut World,
+        id: BrpId,
+        name: &BrpResourceName,
+        resource: &BrpSerializedData,
+    ) -> Result<BrpResponse, BrpError> {
+        let type_registry_arc = (**world.resource::<AppTypeRegistry>()).clone();
+
+        let type_registry = &*type_registry_arc.read();
+
+        let Some(type_registration) = type_registry.get_with_type_path(name) else {
+            return Err(BrpError::MissingTypeRegistration(name.clone()));
+        };
+
+        let reflected =
+            resource.try_deserialize(world, type_registration, name, self.serialization_format)?;
+
+        let reflect_resource = type_registration.data::<ReflectResource>().unwrap();
+
+        reflect_resource.apply_or_insert(world, &*reflected);
 
         Ok(BrpResponse::new(id, BrpResponseContent::Ok))
     }

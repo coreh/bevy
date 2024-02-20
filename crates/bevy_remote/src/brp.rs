@@ -127,6 +127,21 @@ pub enum BrpRequestContent {
         /// The asset to insert, in serialized form. (e.g. `StandardMaterial`)
         asset: BrpSerializedData,
     },
+
+    /// Request data for a resource.
+    GetResource {
+        /// The name of the resource to get.
+        name: BrpResourceName,
+    },
+
+    /// Request insertion of a resource.
+    InsertResource {
+        /// The name of the resource to insert. (e.g. `"MyResource"`)
+        name: BrpResourceName,
+
+        /// The resource to insert, in serialized form. (e.g. `MyResource`)
+        resource: BrpSerializedData,
+    },
 }
 
 /// A list of component names.
@@ -155,6 +170,15 @@ pub type BrpComponentName = String;
 /// In case of a short type path, if there are multiple types with the same name,
 /// a [`BrpError::ComponentAmbiguous`] error will be produced.
 pub type BrpAssetName = String;
+
+/// A string representing the name of a resource.
+///
+/// Can be both a long or a short type path. (e.g. `"bevy_pbr::pbr_material::StandardMaterial"`
+/// or `"StandardMaterial"`)
+///
+/// In case of a short type path, if there are multiple types with the same name,
+/// a [`BrpError::ComponentAmbiguous`] error will be produced.
+pub type BrpResourceName = String;
 
 /// A map of component names to serialized component data.
 pub type BrpComponentMap = HashMap<BrpComponentName, BrpSerializedData>;
@@ -319,6 +343,15 @@ pub enum BrpResponseContent {
         /// The asset, in serialized form.
         asset: BrpSerializedData,
     },
+
+    /// The success response for a [`BrpRequestContent::GetResource`] request.
+    GetResource {
+        /// The name of the resource.
+        name: BrpResourceName,
+
+        /// The resource, in serialized form.
+        resource: BrpSerializedData,
+    },
 }
 
 /// An individual result of a BRP query. (For a single entity)
@@ -390,6 +423,9 @@ pub enum BrpError {
 
     /// The requested asset was not found.
     AssetNotFound(String),
+
+    /// The requested resource was not found.
+    ResourceNotFound(String),
 
     /// The request is invalid.
     InvalidRequest,
