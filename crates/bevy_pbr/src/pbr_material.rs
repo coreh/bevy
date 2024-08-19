@@ -347,6 +347,14 @@ pub struct StandardMaterial {
     #[doc(alias = "extinction_color")]
     pub attenuation_color: Color,
 
+    /// The degree to which the material base color is monochromatic. A value of 0.0 means it is perfectly polychromatic,
+    /// while a value of 1.0 means it is perfectly monochromatic.
+    ///
+    /// Meant to be used with a base color obtained from `SpectralColor`.
+    /// Combining non-zero values with non-spectral colors is not physically correct, but can be used for artistic effect.
+    #[cfg(feature = "spectral_lighting")]
+    pub monochromaticity: f32,
+
     /// The UV channel to use for the [`StandardMaterial::normal_map_texture`].
     ///
     /// Defaults to [`UvChannel::Uv0`].
@@ -797,6 +805,8 @@ impl Default for StandardMaterial {
             ior: 1.5,
             attenuation_color: Color::WHITE,
             attenuation_distance: f32::INFINITY,
+            #[cfg(feature = "spectral_lighting")]
+            monochromaticity: 0.0,
             occlusion_channel: UvChannel::Uv0,
             occlusion_texture: None,
             normal_map_channel: UvChannel::Uv0,
@@ -911,6 +921,7 @@ pub struct StandardMaterialUniform {
     /// Doubles as diffuse albedo for non-metallic, specular for metallic and a mix for everything
     /// in between.
     pub base_color: Vec4,
+
     // Use a color for user-friendliness even though we technically don't use the alpha channel
     // Might be used in the future for exposure correction in HDR
     pub emissive: Vec4,
@@ -936,6 +947,9 @@ pub struct StandardMaterialUniform {
     pub ior: f32,
     /// How far light travels through the volume underneath the material surface before being absorbed
     pub attenuation_distance: f32,
+    /// The degree to which the material base color is monochromatic.
+    #[cfg(feature = "spectral_lighting")]
+    pub monochromaticity: f32,
     pub clearcoat: f32,
     pub clearcoat_perceptual_roughness: f32,
     pub anisotropy_strength: f32,
@@ -1091,6 +1105,8 @@ impl AsBindGroupShaderType<StandardMaterialUniform> for StandardMaterial {
             attenuation_color: LinearRgba::from(self.attenuation_color)
                 .to_f32_array()
                 .into(),
+            #[cfg(feature = "spectral_lighting")]
+            monochromaticity: self.monochromaticity,
             flags: flags.bits(),
             alpha_cutoff,
             parallax_depth_scale: self.parallax_depth_scale,

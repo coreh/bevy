@@ -15,6 +15,9 @@ struct StandardMaterial {
     thickness: f32,
     ior: f32,
     attenuation_distance: f32,
+#ifdef SPECTRAL_LIGHTING
+    monochromaticity: f32,
+#endif
     clearcoat: f32,
     clearcoat_perceptual_roughness: f32,
     anisotropy_strength: f32,
@@ -80,6 +83,7 @@ fn standard_material_new() -> StandardMaterial {
     material.ior = 1.5;
     material.attenuation_distance = 1.0;
     material.attenuation_color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    material.monochromaticity = 0.0;
     material.clearcoat = 0.0;
     material.clearcoat_perceptual_roughness = 0.0;
     material.flags = STANDARD_MATERIAL_FLAGS_ALPHA_MODE_OPAQUE;

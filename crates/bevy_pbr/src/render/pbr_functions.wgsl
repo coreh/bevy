@@ -303,6 +303,12 @@ fn apply_pbr_lighting(
     let diffuse_transmission = in.material.diffuse_transmission;
     let specular_transmission = in.material.specular_transmission;
 
+#ifdef SPECTRAL_LIGHTING
+    let monochromaticity = in.material.monochromaticity;
+#else
+    let monochromaticity = 0.0;
+#endif
+
     let specular_transmissive_color = specular_transmission * in.material.base_color.rgb;
 
     let diffuse_occlusion = in.diffuse_occlusion;
@@ -369,6 +375,9 @@ fn apply_pbr_lighting(
     lighting_input.Ta = in.anisotropy_T;
     lighting_input.Ba = in.anisotropy_B;
 #endif  // STANDARD_MATERIAL_ANISOTROPY
+#ifdef SPECTRAL_LIGHTING
+    lighting_input.monochromaticity = monochromaticity;
+#endif
 
     // And do the same for transmissive if we need to.
 #ifdef STANDARD_MATERIAL_DIFFUSE_TRANSMISSION
@@ -530,7 +539,7 @@ fn apply_pbr_lighting(
     // NdotV = 1.0;
     // F0 = vec3<f32>(0.0)
     // diffuse_occlusion = vec3<f32>(1.0)
-    transmitted_light += ambient::ambient_light(diffuse_transmissive_lobe_world_position, -in.N, -in.V, 1.0, diffuse_transmissive_color, vec3<f32>(0.0), 1.0, vec3<f32>(1.0));
+    transmitted_light += ambient::ambient_light(diffuse_transmissive_lobe_world_position, -in.N, -in.V, 1.0, diffuse_transmissive_color, vec3<f32>(0.0), 1.0, vec3<f32>(1.0), monochromaticity);
 #endif
 
     // Diffuse indirect lighting can come from a variety of sources. The
@@ -599,7 +608,7 @@ fn apply_pbr_lighting(
 #endif  // ENVIRONMENT_MAP
 
     // Ambient light (indirect)
-    indirect_light += ambient::ambient_light(in.world_position, in.N, in.V, NdotV, diffuse_color, F0, perceptual_roughness, diffuse_occlusion);
+    indirect_light += ambient::ambient_light(in.world_position, in.N, in.V, NdotV, diffuse_color, F0, perceptual_roughness, diffuse_occlusion, monochromaticity);
 
     // we'll use the specular component of the transmitted environment
     // light in the call to `specular_transmissive_light()` below

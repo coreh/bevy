@@ -16,6 +16,7 @@ fn ambient_light(
     specular_color: vec3<f32>,
     perceptual_roughness: f32,
     occlusion: vec3<f32>,
+    monochromaticity: f32,
 ) -> vec3<f32> {
     let diffuse_ambient = EnvBRDFApprox(diffuse_color, F_AB(1.0, NdotV));
     let specular_ambient = EnvBRDFApprox(specular_color, F_AB(perceptual_roughness, NdotV));
@@ -26,7 +27,7 @@ fn ambient_light(
     let specular_occlusion = saturate(dot(specular_color, vec3(50.0 * 0.33)));
 
 #ifdef SPECTRAL_LIGHTING
-    return monochromaticity_blend((diffuse_ambient + specular_ambient * specular_occlusion), lights.ambient_color.rgb * occlusion, lights.ambient_monochromaticity);
+    return monochromaticity_blend((diffuse_ambient + specular_ambient * specular_occlusion), lights.ambient_color.rgb * occlusion, monochromaticity, lights.ambient_monochromaticity);
 #else
     return (diffuse_ambient + specular_ambient * specular_occlusion) * lights.ambient_color.rgb * occlusion;
 #endif

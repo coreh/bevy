@@ -110,6 +110,11 @@ struct LightingInput {
     // the tangent direction.
     Ba: vec3<f32>,
 #endif  // STANDARD_MATERIAL_ANISOTROPY
+
+#ifdef SPECTRAL_LIGHTING
+    // The monochromaticity of the material.
+    monochromaticity: f32,
+#endif  // SPECTRAL_LIGHTING
 }
 
 // Values derived from the `LightingInput` for both diffuse and specular lights.
@@ -540,7 +545,7 @@ fn point_light(light_id: u32, input: ptr<function, LightingInput>) -> vec3<f32> 
 #endif  // STANDARD_MATERIAL_CLEARCOAT
 
 #ifdef SPECTRAL_LIGHTING
-    return monochromaticity_blend(color, (*light).color_inverse_square_range.rgb * (rangeAttenuation * derived_input.NdotL), (*light).monochromaticity);
+    return monochromaticity_blend(color, (*light).color_inverse_square_range.rgb * (rangeAttenuation * derived_input.NdotL), (*input).monochromaticity, (*light).monochromaticity);
 #else
     return color * (*light).color_inverse_square_range.rgb * (rangeAttenuation * derived_input.NdotL);
 #endif
@@ -618,21 +623,25 @@ fn directional_light(light_id: u32, input: ptr<function, LightingInput>) -> vec3
 #endif  // STANDARD_MATERIAL_CLEARCOAT
 
 #ifdef SPECTRAL_LIGHTING
-    return monochromaticity_blend(color, (*light).color.rgb, (*light).monochromaticity);
+    return monochromaticity_blend(color, (*light).color.rgb, (*input).monochromaticity, (*light).monochromaticity);
 #else
     return color * (*light).color.rgb;
 #endif
 }
 
 #ifdef SPECTRAL_LIGHTING
-// Blends base and light colors taking into account the light's monochromaticity
-fn monochromaticity_blend(base: vec3<f32>, light: vec3<f32>, monochromaticity: f32) -> vec3<f32> {
+// Blends base and light colors taking into account the base and light's monochromaticity
+fn monochromaticity_blend(base: vec3<f32>, light: vec3<f32>, base_monochromaticity: f32, light_monochromaticity: f32) -> vec3<f32> {
     // Convert both colors to HSV
     let base_hsv = rgb_to_hsv(base);
     let light_hsv = rgb_to_hsv(light);
 
     // Approximate a gaussian using a triangle function
-    let deviation = 2.0 * PI / 3.0; // 120°
+    let deviation = mix(
+        2.0 * PI / 3.0, // max 120°
+        PI / 6.0, // min 30°
+        base_monochromaticity
+    );
     let triangular = (max(0.0, deviation - abs(base_hsv.x - light_hsv.x)) / deviation);
 
     let response = mix(
@@ -644,7 +653,7 @@ fn monochromaticity_blend(base: vec3<f32>, light: vec3<f32>, monochromaticity: f
     return mix(
         base * light, // Polychromatic (Multiplicative blending)
         response * light, // Mono-chromatic (Hue + value-based blending)
-        monochromaticity * base_hsv.y,
+        light_monochromaticity * base_hsv.y,
     );
 }
 #endif  // SPECTRAL_LIGHTING

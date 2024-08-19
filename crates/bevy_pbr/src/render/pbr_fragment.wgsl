@@ -77,6 +77,10 @@ fn pbr_input_from_standard_material(
     pbr_input.material.base_color *= pbr_bindings::material.base_color;
     pbr_input.material.deferred_lighting_pass_id = pbr_bindings::material.deferred_lighting_pass_id;
 
+#ifdef SPECTRAL_LIGHTING
+    pbr_input.material.monochromaticity = pbr_bindings::material.monochromaticity;
+#endif
+
     // Neubelt and Pettineo 2013, "Crafting a Next-gen Material Pipeline for The Order: 1886"
     let NdotV = max(dot(pbr_input.N, pbr_input.V), 0.0001);
 
