@@ -81,6 +81,13 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         output_color = pbr_input.material.base_color;
     }
 
+    let posterizing_levels = 16.0;
+    let color_l = length(output_color.rgb);
+    let color_d = normalize(output_color.rgb);
+    let color_p = pow(floor(sqrt(color_l) * posterizing_levels) / posterizing_levels, 2.0);
+
+    output_color = vec4<f32>(color_p * color_d, pbr_input.material.base_color.a);
+
     output_color = pbr_functions::main_pass_post_lighting_processing(pbr_input, output_color);
 
     return output_color;
