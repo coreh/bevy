@@ -565,7 +565,7 @@ pub fn update_directional_light_frusta(
 pub fn update_point_light_frusta(
     // global_lights: Res<GlobalVisibleClusterableObjects>,
     mut views: Query<
-        (Entity, &GlobalTransform, &PointLight, &mut CubemapFrusta),
+        (&GlobalTransform, &PointLight, &mut CubemapFrusta),
         Or<(Changed<GlobalTransform>, Changed<PointLight>)>,
     >,
 ) {
@@ -576,7 +576,7 @@ pub fn update_point_light_frusta(
         .map(|CubeMapFace { target, up }| Transform::IDENTITY.looking_at(*target, *up))
         .collect::<Vec<_>>();
 
-    for (entity, transform, point_light, mut cubemap_frusta) in &mut views {
+    for (transform, point_light, mut cubemap_frusta) in &mut views {
         // The frusta are used for culling meshes to the light for shadow mapping
         // so if shadow mapping is disabled for this light, then the frusta are
         // not needed.
