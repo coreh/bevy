@@ -155,7 +155,7 @@ fn upsample(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
     for (var i = -5; i < 5; i = i + 1) {
         let m_uv = ((r_uv - vec2(0.5)) * f32(i) / vec2(3, 5.3)) + vec2(0.5);
-        acc += pow(sample_input_3x3_tent(round(m_uv * vec2(225, 400)) / vec2(225, 400)), vec3(1.2)) * 0.5;
+        acc += pow(sample_input_3x3_tent(round(m_uv * vec2(225, 400)) / vec2(225, 400)), vec3(1.2)) * 0.08;
     }
 
     return vec4<f32>(acc / 1000.0 + sample_input_3x3_tent(r_uv), 1.0);
