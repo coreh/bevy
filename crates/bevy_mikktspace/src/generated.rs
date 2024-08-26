@@ -319,6 +319,14 @@ pub unsafe fn genTangSpace<I: Geometry>(geometry: &mut I, fAngularThreshold: f32
                 let mut pTSpace: *const STSpace = &mut psTspace[index] as *mut STSpace;
                 let mut tang = Vec3::new((*pTSpace).vOs.x, (*pTSpace).vOs.y, (*pTSpace).vOs.z);
                 let mut bitang = Vec3::new((*pTSpace).vOt.x, (*pTSpace).vOt.y, (*pTSpace).vOt.z);
+                if tang == Vec3::ZERO || bitang == Vec3::ZERO {
+                    // Workaround: If the tangent or bitangent is zero, we fall back to an arbitrary
+                    // non-mikktspace tangent. This will result in incorrect parallax/normal mapping,
+                    // but at least it won't render the affect triangles as completely black.
+                    let normal = Vec3::from_slice(&geometry.normal(f, i));
+                    tang = normal.any_orthogonal_vector();
+                    bitang = normal.cross(tang);
+                }
                 geometry.set_tangent(
                     tang.into(),
                     bitang.into(),
