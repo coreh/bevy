@@ -563,7 +563,7 @@ pub fn update_directional_light_frusta(
 
 // NOTE: Run this after assign_lights_to_clusters!
 pub fn update_point_light_frusta(
-    global_lights: Res<GlobalVisibleClusterableObjects>,
+    // global_lights: Res<GlobalVisibleClusterableObjects>,
     mut views: Query<
         (Entity, &GlobalTransform, &PointLight, &mut CubemapFrusta),
         Or<(Changed<GlobalTransform>, Changed<PointLight>)>,
@@ -582,7 +582,8 @@ pub fn update_point_light_frusta(
         // not needed.
         // Also, if the light is not relevant for any cluster, it will not be in the
         // global lights set and so there is no need to update its frusta.
-        if !point_light.shadows_enabled || !global_lights.entities.contains(&entity) {
+        if !point_light.shadows_enabled {
+            //|| !global_lights.entities.contains(&entity) {
             continue;
         }
 
