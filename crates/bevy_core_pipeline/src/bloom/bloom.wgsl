@@ -145,17 +145,18 @@ fn downsample(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 @fragment
 fn upsample(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 #ifdef FINAL_UPSAMPLE
-    let r_uv = round(uv * vec2(225, 400)) / vec2(225, 400);
+    let resolution = vec2<f32>(225, 400);
+    let r_uv = round(uv * resolution) / resolution;
     var acc = vec3<f32>(0.0);
 
     for (var i = -10; i < 10; i = i + 1) {
         let m_uv = ((r_uv - vec2(0.5)) * f32(i) / vec2(9, 16)) * length(r_uv - vec2(0.5)) + vec2(0.5);
-        acc += pow(sample_input_3x3_tent(round(m_uv * vec2(225, 400)) / vec2(225, 400)), vec3(1.2)) * vec3<f32>(max(cos(f32(i)), 0.0), max(cos(f32(i) + 2.09439510239), 0.0), max(cos(f32(i) + 4.18879020479), 0.0));
+        acc += pow(sample_input_3x3_tent(round(m_uv * resolution) / resolution), vec3(1.2)) * vec3<f32>(max(cos(f32(i)), 0.0), max(cos(f32(i) + 2.09439510239), 0.0), max(cos(f32(i) + 4.18879020479), 0.0));
     }
 
     for (var i = -5; i < 5; i = i + 1) {
         let m_uv = ((r_uv - vec2(0.5)) * f32(i) / vec2(3, 5.3)) + vec2(0.5);
-        acc += pow(sample_input_3x3_tent(round(m_uv * vec2(225, 400)) / vec2(225, 400)), vec3(1.2)) * 0.08;
+        acc += pow(sample_input_3x3_tent(round(m_uv * resolution) / resolution), vec3(1.2)) * 0.08;
     }
 
     return vec4<f32>(acc / 1000.0 + sample_input_3x3_tent(r_uv), 1.0);
