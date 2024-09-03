@@ -38,6 +38,7 @@ pub struct ExtractedPointLight {
     pub shadow_depth_bias: f32,
     pub shadow_normal_bias: f32,
     pub spot_light_angles: Option<(f32, f32)>,
+    pub render_layers: RenderLayers,
     #[cfg(feature = "spectral_lighting")]
     pub monochromaticity: f32,
 }
@@ -68,6 +69,10 @@ bitflags::bitflags! {
         const NONE                       = 0;
         const UNINITIALIZED              = 0xFFFF;
     }
+}
+
+impl PointLightFlags {
+    pub const RENDER_LAYERS_SHIFT_BITS: usize = 16;
 }
 
 #[derive(Copy, Clone, ShaderType, Default, Debug)]
@@ -102,6 +107,10 @@ bitflags::bitflags! {
         const NONE                       = 0;
         const UNINITIALIZED              = 0xFFFF;
     }
+}
+
+impl DirectionalLightFlags {
+    pub const RENDER_LAYERS_SHIFT_BITS: usize = 16;
 }
 
 #[derive(Copy, Clone, Debug, ShaderType)]
@@ -189,6 +198,7 @@ pub fn extract_lights(
             &GlobalTransform,
             &ViewVisibility,
             &CubemapFrusta,
+            Option<&RenderLayers>,
         )>,
     >,
     spot_lights: Extract<
@@ -198,6 +208,7 @@ pub fn extract_lights(
             &GlobalTransform,
             &ViewVisibility,
             &Frustum,
+            Option<&RenderLayers>,
         )>,
     >,
     directional_lights: Extract<
@@ -239,8 +250,14 @@ pub fn extract_lights(
 
     let mut point_lights_values = Vec::with_capacity(*previous_point_lights_len);
     for entity in global_point_lights.iter().copied() {
-        let Ok((point_light, cubemap_visible_entities, transform, view_visibility, frusta)) =
-            point_lights.get(entity)
+        let Ok((
+            point_light,
+            cubemap_visible_entities,
+            transform,
+            view_visibility,
+            frusta,
+            render_layers,
+        )) = point_lights.get(entity)
         else {
             continue;
         };
@@ -266,6 +283,7 @@ pub fn extract_lights(
                 * point_light_texel_size
                 * std::f32::consts::SQRT_2,
             spot_light_angles: None,
+            render_layers: render_layers.unwrap_or_default().clone(),
             #[cfg(feature = "spectral_lighting")]
             monochromaticity: point_light.monochromaticity,
         };
@@ -283,8 +301,14 @@ pub fn extract_lights(
 
     let mut spot_lights_values = Vec::with_capacity(*previous_spot_lights_len);
     for entity in global_point_lights.iter().copied() {
-        if let Ok((spot_light, visible_entities, transform, view_visibility, frustum)) =
-            spot_lights.get(entity)
+        if let Ok((
+            spot_light,
+            visible_entities,
+            transform,
+            view_visibility,
+            frustum,
+            render_layers,
+        )) = spot_lights.get(entity)
         {
             if !view_visibility.get() {
                 continue;
@@ -317,6 +341,7 @@ pub fn extract_lights(
                             * texel_size
                             * std::f32::consts::SQRT_2,
                         spot_light_angles: Some((spot_light.inner_angle, spot_light.outer_angle)),
+                        render_layers: render_layers.unwrap_or_default().clone(),
                         #[cfg(feature = "spectral_lighting")]
                         monochromaticity: spot_light.monochromaticity,
                     },
@@ -740,7 +765,9 @@ pub fn prepare_lights(
                 .xyz()
                 .extend(1.0 / (light.range * light.range)),
             position_radius: light.transform.translation().extend(light.radius),
-            flags: flags.bits(),
+            flags: flags.bits()
+                | (light.render_layers.bits_u16() as u32)
+                    << PointLightFlags::RENDER_LAYERS_SHIFT_BITS,
             shadow_depth_bias: light.shadow_depth_bias,
             shadow_normal_bias: light.shadow_normal_bias,
             spot_light_tan_angle,
@@ -786,7 +813,9 @@ pub fn prepare_lights(
             color: Vec4::from_slice(&light.color.to_f32_array()) * light.illuminance,
             // direction is negated to be ready for N.L
             dir_to_light: light.transform.back().into(),
-            flags: flags.bits(),
+            flags: flags.bits()
+                | (light.render_layers.bits_u16() as u32)
+                    << DirectionalLightFlags::RENDER_LAYERS_SHIFT_BITS,
             shadow_depth_bias: light.shadow_depth_bias,
             shadow_normal_bias: light.shadow_normal_bias,
             num_cascades: num_cascades as u32,
