@@ -107,6 +107,7 @@ impl_reflect_value!(::core::ops::RangeFrom<T: Clone + Send + Sync>());
 impl_reflect_value!(::core::ops::RangeTo<T: Clone + Send + Sync>());
 impl_reflect_value!(::core::ops::RangeToInclusive<T: Clone + Send + Sync>());
 impl_reflect_value!(::core::ops::RangeFull());
+impl_reflect_value!(::std::ops::Bound<T: Clone + Send + Sync>());
 impl_reflect_value!(::bevy_utils::Duration(
     Debug,
     Hash,
@@ -2443,11 +2444,11 @@ mod tests {
 
     #[test]
     fn nonzero_usize_impl_reflect_from_reflect() {
-        let a: &dyn PartialReflect = &std::num::NonZeroUsize::new(42).unwrap();
-        let b: &dyn PartialReflect = &std::num::NonZeroUsize::new(42).unwrap();
+        let a: &dyn PartialReflect = &std::num::NonZero::<usize>::new(42).unwrap();
+        let b: &dyn PartialReflect = &std::num::NonZero::<usize>::new(42).unwrap();
         assert!(a.reflect_partial_eq(b).unwrap_or_default());
-        let forty_two: std::num::NonZeroUsize = FromReflect::from_reflect(a).unwrap();
-        assert_eq!(forty_two, std::num::NonZeroUsize::new(42).unwrap());
+        let forty_two: std::num::NonZero<usize> = FromReflect::from_reflect(a).unwrap();
+        assert_eq!(forty_two, std::num::NonZero::<usize>::new(42).unwrap());
     }
 
     #[test]
