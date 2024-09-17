@@ -762,8 +762,8 @@ pub fn prepare_core_3d_transmission_textures(
 
         let sampler = render_device.create_sampler(&SamplerDescriptor {
             label: Some("view_transmission_sampler"),
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Linear,
+            mag_filter: FilterMode::Nearest,
+            min_filter: FilterMode::Nearest,
             ..Default::default()
         });
 
