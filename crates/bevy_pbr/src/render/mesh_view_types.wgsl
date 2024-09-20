@@ -14,10 +14,6 @@ struct ClusterableObject {
 #ifdef SPECTRAL_LIGHTING
     monochromaticity: f32,
 #endif
-    soft_shadow_size: f32,
-    shadow_map_near_z: f32,
-    pad_a: f32,
-    pad_b: f32,
 };
 
 const POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT: u32   = 1u;
@@ -36,7 +32,6 @@ struct DirectionalLight {
     direction_to_light: vec3<f32>,
     // 'flags' is a bit field indicating various options. u32 is 32 bits so we have up to 32 options.
     flags: u32,
-    soft_shadow_size: f32,
     shadow_depth_bias: f32,
     shadow_normal_bias: f32,
     num_cascades: u32,

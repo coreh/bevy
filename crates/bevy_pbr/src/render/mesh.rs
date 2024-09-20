@@ -1859,11 +1859,11 @@ impl SpecializedMeshPipeline for MeshPipeline {
             shader_defs.push("TONEMAP_IN_SHADER".into());
             shader_defs.push(ShaderDefVal::UInt(
                 "TONEMAPPING_LUT_TEXTURE_BINDING_INDEX".into(),
-                23,
+                21,
             ));
             shader_defs.push(ShaderDefVal::UInt(
                 "TONEMAPPING_LUT_SAMPLER_BINDING_INDEX".into(),
-                24,
+                22,
             ));
 
             let method = key.intersection(MeshPipelineKey::TONEMAP_METHOD_RESERVED_BITS);
