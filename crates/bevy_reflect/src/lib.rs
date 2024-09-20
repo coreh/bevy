@@ -2961,7 +2961,12 @@ bevy_reflect::tests::Test {
             let output = to_string_pretty(&ser, config).unwrap();
             let expected = r#"
 {
-    "glam::Quat": (1.0, 2.0, 3.0, 4.0),
+    "glam::Quat": (
+        x: 1.0,
+        y: 2.0,
+        z: 3.0,
+        w: 4.0,
+    ),
 }"#;
 
             assert_eq!(expected, format!("\n{output}"));
@@ -2971,7 +2976,12 @@ bevy_reflect::tests::Test {
         fn quat_deserialization() {
             let data = r#"
 {
-    "glam::Quat": (1.0, 2.0, 3.0, 4.0),
+    "glam::Quat": (
+        x: 1.0,
+        y: 2.0,
+        z: 3.0,
+        w: 4.0,
+    ),
 }"#;
 
             let mut registry = TypeRegistry::default();
@@ -3010,7 +3020,11 @@ bevy_reflect::tests::Test {
             let output = to_string_pretty(&ser, config).unwrap();
             let expected = r#"
 {
-    "glam::Vec3": (12.0, 3.0, -6.9),
+    "glam::Vec3": (
+        x: 12.0,
+        y: 3.0,
+        z: -6.9,
+    ),
 }"#;
 
             assert_eq!(expected, format!("\n{output}"));
@@ -3020,7 +3034,11 @@ bevy_reflect::tests::Test {
         fn vec3_deserialization() {
             let data = r#"
 {
-    "glam::Vec3": (12.0, 3.0, -6.9),
+    "glam::Vec3": (
+        x: 12.0,
+        y: 3.0,
+        z: -6.9,
+    ),
 }"#;
 
             let mut registry = TypeRegistry::default();
