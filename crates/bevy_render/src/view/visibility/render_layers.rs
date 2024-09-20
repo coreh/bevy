@@ -47,7 +47,7 @@ pub type Layer = usize;
 /// This is a compromise to limit shader complexity and the amount data sent to the GPU,
 /// while still allowing for some flexibility.
 #[derive(Component, Clone, Reflect, PartialEq, Eq, PartialOrd, Ord)]
-#[reflect(Component, Default, PartialEq)]
+#[reflect(Component, Default, PartialEq, Debug)]
 pub struct RenderLayers(SmallVec<[u64; INLINE_BLOCKS]>);
 
 /// The number of memory blocks stored inline
