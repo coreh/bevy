@@ -101,6 +101,7 @@ pub fn extract_text2d_sprite(
             * scaling;
         let mut color = LinearRgba::WHITE;
         let mut current_section = usize::MAX;
+        let mut emboss_strength = 0.0;
         for PositionedGlyph {
             position,
             atlas_info,
@@ -110,6 +111,7 @@ pub fn extract_text2d_sprite(
         {
             if *section_index != current_section {
                 color = LinearRgba::from(text.sections[*section_index].style.color);
+                emboss_strength = text.sections[*section_index].style.emboss_strength;
                 current_section = *section_index;
             }
             let atlas = texture_atlases.get(&atlas_info.texture_atlas).unwrap();
@@ -127,6 +129,7 @@ pub fn extract_text2d_sprite(
                     flip_y: false,
                     anchor: Anchor::Center.as_vec(),
                     original_entity: Some(original_entity),
+                    emboss_strength,
                 },
             );
         }

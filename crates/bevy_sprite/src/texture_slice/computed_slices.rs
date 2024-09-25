@@ -54,6 +54,7 @@ impl ComputedTextureSlices {
                 flip_y,
                 image_handle_id: handle.id(),
                 anchor: Self::redepend_anchor_from_sprite_to_slice(sprite, slice),
+                emboss_strength: sprite.emboss_strength,
             }
         })
     }

@@ -19,12 +19,14 @@ struct VertexInput {
     @location(2) i_model_transpose_col2: vec4<f32>,
     @location(3) i_color: vec4<f32>,
     @location(4) i_uv_offset_scale: vec4<f32>,
+    @location(5) i_effects: vec4<f32>,
 }
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) @interpolate(flat) color: vec4<f32>,
+    @location(2) @interpolate(flat) effects: vec4<f32>,
 };
 
 @vertex
@@ -44,6 +46,7 @@ fn vertex(in: VertexInput) -> VertexOutput {
     )) * vec4<f32>(vertex_position, 1.0);
     out.uv = vec2<f32>(vertex_position.xy) * in.i_uv_offset_scale.zw + in.i_uv_offset_scale.xy;
     out.color = in.i_color;
+    out.effects = in.i_effects;
 
     return out;
 }
@@ -54,6 +57,14 @@ fn vertex(in: VertexInput) -> VertexOutput {
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = in.color * textureSample(sprite_texture, sprite_sampler, in.uv);
+
+    let duv_dx = dpdxFine(in.uv);
+    let duv_dy = dpdyFine(in.uv);
+
+    let highlight = 1.0 - textureSample(sprite_texture, sprite_sampler, in.uv - duv_dy * 1.0 - duv_dx * 0.0).a;
+    let shadow = 1.0 - textureSample(sprite_texture, sprite_sampler, in.uv + duv_dy * 0.0 + duv_dx * 1.0).a;
+    color = vec4(mix(color.rgb, vec3(0.0, 0.0, 0.0), max(shadow - highlight, 0.0) * in.effects.x), color.a);
+    color = vec4(mix(color.rgb, color.rgb * 2.0, max(highlight, 0.0) * in.effects.x), color.a);
 
 #ifdef TONEMAP_IN_SHADER
     color = tonemapping::tone_mapping(color, view.color_grading);

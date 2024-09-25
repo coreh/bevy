@@ -28,6 +28,7 @@ pub struct Sprite {
     pub rect: Option<Rect>,
     /// [`Anchor`] point of the sprite in the world
     pub anchor: Anchor,
+    pub emboss_strength: f32,
 }
 
 impl Sprite {

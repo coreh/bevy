@@ -237,6 +237,8 @@ pub struct TextStyle {
     pub font_size: f32,
     /// The color of the text for this section.
     pub color: Color,
+    /// Strength of the emboss effect. 0.0 is no emboss, 1.0 is full emboss.
+    pub emboss_strength: f32,
 }
 
 impl Default for TextStyle {
@@ -245,6 +247,7 @@ impl Default for TextStyle {
             font: Default::default(),
             font_size: 20.0,
             color: Color::WHITE,
+            emboss_strength: 0.0,
         }
     }
 }
