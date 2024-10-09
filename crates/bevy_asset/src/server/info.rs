@@ -1,7 +1,7 @@
 use crate::{
     meta::{AssetHash, MetaTransform},
     Asset, AssetHandleProvider, AssetLoadError, AssetPath, DependencyLoadState, ErasedLoadedAsset,
-    Handle, InternalAssetEvent, LoadState, RecursiveDependencyLoadState, StrongHandle,
+    Handle, InternalAssetEvent, LoadState, LoadStats, RecursiveDependencyLoadState, StrongHandle,
     UntypedAssetId, UntypedHandle,
 };
 use bevy_ecs::world::World;
@@ -736,6 +736,29 @@ impl AssetInfos {
                     );
                 }
             }
+        }
+    }
+
+    /// Computes aggregated loading statistics based on the `LoadState` of each asset.
+    pub(crate) fn compute_load_stats(&self) -> LoadStats {
+        let mut loaded: usize = 0;
+        let mut loading: usize = 0;
+        let mut failed: usize = 0;
+        let mut not_loaded: usize = 0;
+        for info in self.infos.values() {
+            match info.load_state {
+                LoadState::Loaded => loaded += 1,
+                LoadState::Loading => loading += 1,
+                LoadState::Failed(_) => failed += 1,
+                LoadState::NotLoaded => not_loaded += 1,
+            }
+        }
+        LoadStats {
+            loaded,
+            loading,
+            failed,
+            not_loaded,
+            total: self.infos.len(),
         }
     }
 }

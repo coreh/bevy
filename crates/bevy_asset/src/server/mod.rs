@@ -1007,6 +1007,12 @@ impl AssetServer {
         )
     }
 
+    /// Returns aggregated loading statistics based on the `LoadState` of each asset.
+    pub fn load_stats(&self) -> LoadStats {
+        // TODO: cache this somehow?
+        self.data.infos.read().compute_load_stats()
+    }
+
     /// Returns an active handle for the given path, if the asset at the given path has already started loading,
     /// or is still "alive".
     pub fn get_handle<'a, A: Asset>(&self, path: impl Into<AssetPath<'a>>) -> Option<Handle<A>> {
@@ -1455,6 +1461,25 @@ pub enum RecursiveDependencyLoadState {
     /// in all related [`LoadState`]s and [`DependencyLoadState`]s in the asset's
     /// dependency tree.
     Failed(Arc<AssetLoadError>),
+}
+
+/// Statistics about the current asset loading states
+#[derive(Debug, Clone)]
+pub struct LoadStats {
+    /// How many assets have not started loading yet
+    pub not_loaded: usize,
+
+    /// How many assets are currently loading
+    pub loading: usize,
+
+    /// How many assets have been full loaded
+    pub loaded: usize,
+
+    /// How many assets have failed to load
+    pub failed: usize,
+
+    /// The total number of assets
+    pub total: usize,
 }
 
 /// An error that occurs during an [`Asset`] load.
