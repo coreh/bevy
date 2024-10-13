@@ -235,6 +235,10 @@ pub struct TextStyle {
     /// A new font atlas is generated for every combination of font handle and scaled font size
     /// which can have a strong performance impact.
     pub font_size: f32,
+    /// The section line height, relative to the font size. (e.g. If `font_size` is `20.0` and `line_height` is `1.5`, the resulting line height will be `30.0`.)
+    ///
+    /// Defaults to `1.2`.
+    pub line_height: f32,
     /// The color of the text for this section.
     pub color: Color,
     /// Strength of the emboss effect. 0.0 is no emboss, 1.0 is full emboss.
@@ -246,6 +250,7 @@ impl Default for TextStyle {
         Self {
             font: Default::default(),
             font_size: 20.0,
+            line_height: 1.2,
             color: Color::WHITE,
             emboss_strength: 0.0,
         }

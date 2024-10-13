@@ -415,7 +415,10 @@ fn get_attrs<'a>(
         .stretch(face.stretch)
         .style(face.style)
         .weight(face.weight)
-        .metrics(Metrics::relative(section.style.font_size, 1.2).scale(scale_factor as f32))
+        .metrics(
+            Metrics::relative(section.style.font_size, section.style.line_height)
+                .scale(scale_factor as f32),
+        )
         .color(cosmic_text::Color(section.style.color.to_linear().as_u32()));
     attrs
 }
