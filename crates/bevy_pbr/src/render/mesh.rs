@@ -1836,9 +1836,9 @@ impl SpecializedMeshPipeline for MeshPipeline {
             shader_defs.push("DEFERRED_PREPASS".into());
         }
 
-        if key.contains(MeshPipelineKey::NORMAL_PREPASS) && key.msaa_samples() == 1 && is_opaque {
-            shader_defs.push("LOAD_PREPASS_NORMALS".into());
-        }
+        // if key.contains(MeshPipelineKey::NORMAL_PREPASS) && key.msaa_samples() == 1 && is_opaque {
+        //     shader_defs.push("LOAD_PREPASS_NORMALS".into());
+        // }
 
         let view_projection = key.intersection(MeshPipelineKey::VIEW_PROJECTION_RESERVED_BITS);
         if view_projection == MeshPipelineKey::VIEW_PROJECTION_NONSTANDARD {
