@@ -137,6 +137,8 @@ fn calculate_circle_of_confusion(in_frag_coord: vec4<f32>) -> f32 {
 }
 
 fn calculate_pixelation_factor(in_frag_coord: vec4<f32>) -> f32 {
+    let focus = dof_params.focal_distance;
+
     var depth = dof_params.max_depth;
 
     // Sample the depth.
@@ -148,7 +150,11 @@ fn calculate_pixelation_factor(in_frag_coord: vec4<f32>) -> f32 {
         }
     }
 
-    return min(ceil(max(1.0, 1.0 / (depth / 3.0))), 4.0);
+    let framebuffer_size = vec2<f32>(textureDimensions(color_texture_a));
+
+    let max_pixelation = ceil(max(framebuffer_size.x, framebuffer_size.y) / 150.0);
+
+    return min(1.0 / ((depth * (0.95 + 0.05 * cos(2.0 * in_frag_coord.x / depth) * cos(2.0 * in_frag_coord.y / depth))) / focus), max_pixelation);
 }
 
 // Performs a single direction of the separable Gaussian blur kernel.
@@ -295,10 +301,15 @@ fn gaussian_vertical(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
 //       │
 @fragment
 fn bokeh_pass_0(in: FullscreenVertexOutput) -> DualOutput {
-    let coc = calculate_circle_of_confusion(in.position);
     let pixelation = calculate_pixelation_factor(in.position);
-    let vertical = box_blur_a(in.position, coc, pixelation, vec2(0.0, 1.0));
-    let diagonal = box_blur_a(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
+    var coc: f32;
+    if pixelation > 1.0 {
+        coc = 1.0;
+    } else {
+        coc = calculate_circle_of_confusion(in.position);
+    }
+    let vertical = box_blur_a(in.position, coc, max(1.0, round(pixelation)), vec2(0.0, 1.0));
+    let diagonal = box_blur_a(in.position, coc, max(1.0, round(pixelation)), vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
 
     // Note that the diagonal part is pre-mixed with the vertical component.
     var output: DualOutput;
@@ -316,10 +327,23 @@ fn bokeh_pass_0(in: FullscreenVertexOutput) -> DualOutput {
 #ifdef DUAL_INPUT
 @fragment
 fn bokeh_pass_1(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    let coc = calculate_circle_of_confusion(in.position);
     let pixelation = calculate_pixelation_factor(in.position);
-    let output_0 = box_blur_a(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
-    let output_1 = box_blur_b(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_5_6, SIN_NEG_FRAC_PI_5_6));
-    return mix(output_0, output_1, 0.5);
+    var coc: f32;
+    if pixelation > 1.0 {
+        coc = 1.0;
+    } else {
+        coc = calculate_circle_of_confusion(in.position);
+    }
+    let output_0 = box_blur_a(in.position, coc, max(1.0, round(pixelation)), vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
+    let output_1 = box_blur_b(in.position, coc, max(1.0, round(pixelation)), vec2(COS_NEG_FRAC_PI_5_6, SIN_NEG_FRAC_PI_5_6));
+
+    if coc > 1.0 {
+        let l = length(max(output_0.rgb, output_1.rgb));
+        let n = normalize(mix(output_0.rgb, output_1.rgb, 0.5));
+
+        return vec4(n * l, 1.0);
+    } else {
+        return mix(output_0, output_1, 0.5);
+    }
 }
 #endif
