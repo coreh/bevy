@@ -148,7 +148,7 @@ fn calculate_pixelation_factor(in_frag_coord: vec4<f32>) -> f32 {
         }
     }
 
-    return round(max(1.0, 1.0 / (depth / 3.0)));
+    return min(ceil(max(1.0, 1.0 / (depth / 3.0))), 4.0);
 }
 
 // Performs a single direction of the separable Gaussian blur kernel.
