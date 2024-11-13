@@ -516,8 +516,8 @@ impl FromWorld for DepthOfFieldGlobalBindGroupLayout {
         // Create the color texture sampler.
         let sampler = render_device.create_sampler(&SamplerDescriptor {
             label: Some("depth of field sampler"),
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Linear,
+            mag_filter: FilterMode::Nearest,
+            min_filter: FilterMode::Nearest,
             ..default()
         });
 

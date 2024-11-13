@@ -107,21 +107,31 @@ const COS_NEG_FRAC_PI_5_6: f32 = -0.8660254037844387;
 // sin(-150°), used for the bokeh blur.
 const SIN_NEG_FRAC_PI_5_6: f32 = -0.5;
 
+fn sample_depth(in_frag_coord: vec4<f32>) -> f32 {
+    var depth = dof_params.max_depth;
+
+    // Sample the depth.
+    for (var x = -1; x <= 1; x += 1) {
+        for (var y = -1; y <= 1; y += 1) {
+            let frag_coord = vec2<i32>(floor(in_frag_coord.xy)) + vec2(x, y);
+            let raw_depth = textureLoad(depth_texture, frag_coord, 0);
+            depth = min(-depth_ndc_to_view_z(raw_depth), depth);
+        }
+    }
+
+    return depth;
+}
+
 // Calculates and returns the diameter (not the radius) of the [circle of
 // confusion].
 //
 // [circle of confusion]: https://en.wikipedia.org/wiki/Circle_of_confusion
-fn calculate_circle_of_confusion(in_frag_coord: vec4<f32>) -> f32 {
+fn calculate_circle_of_confusion(depth: f32) -> f32 {
     // Unpack the depth of field parameters.
     let focus = dof_params.focal_distance;
     let f = dof_params.focal_length;
     let scale = dof_params.coc_scale_factor;
     let max_coc_diameter = dof_params.max_circle_of_confusion_diameter;
-
-    // Sample the depth.
-    let frag_coord = vec2<i32>(floor(in_frag_coord.xy));
-    let raw_depth = textureLoad(depth_texture, frag_coord, 0);
-    let depth = min(-depth_ndc_to_view_z(raw_depth), dof_params.max_depth);
 
     // Calculate the circle of confusion.
     //
@@ -132,6 +142,10 @@ fn calculate_circle_of_confusion(in_frag_coord: vec4<f32>) -> f32 {
 
     let framebuffer_size = vec2<f32>(textureDimensions(color_texture_a));
     return clamp(candidate_coc * framebuffer_size.y, 0.0, max_coc_diameter);
+}
+
+fn calculate_pixelation_factor(depth: f32) -> f32 {
+    return ceil(max(1.0, 1.0 / (depth / 2.5)));
 }
 
 // Performs a single direction of the separable Gaussian blur kernel.
@@ -207,19 +221,22 @@ fn gaussian_blur(frag_coord: vec4<f32>, coc: f32, frag_offset: vec2<f32>) -> vec
 //
 // * `frag_offset` is the vector, in screen-space units, from one sample to the
 //   next. This need not be horizontal or vertical.
-fn box_blur_a(frag_coord: vec4<f32>, coc: f32, frag_offset: vec2<f32>) -> vec4<f32> {
+fn box_blur_a(frag_coord: vec4<f32>, coc: f32, pixelation: f32, frag_offset: vec2<f32>) -> vec4<f32> {
     let support = i32(round(coc * 0.5));
-    let uv = frag_coord.xy / vec2<f32>(textureDimensions(color_texture_a));
+    let rounded = floor(frag_coord.xy / pixelation);
+    let dither_offset = rounded % vec2(2.0, 2.0) * (1.0 - pixelation % 2.0);
+    let uv = (rounded * pixelation + dither_offset) / vec2<f32>(textureDimensions(color_texture_a));
+
     let offset = frag_offset / vec2<f32>(textureDimensions(color_texture_a));
 
     // Accumulate samples in a single direction.
-    var sum = vec3(0.0);
+    var m = vec3(0.0);
     for (var i = 0; i <= support; i += 1) {
-        sum += textureSampleLevel(
-            color_texture_a, color_texture_sampler, uv + offset * f32(i), 0.0).rgb;
+        m = max(m, textureSampleLevel(
+            color_texture_a, color_texture_sampler, uv + offset * f32(i), 0.0).rgb);
     }
 
-    return vec4(sum / vec3(1.0 + f32(support)), 1.0);
+    return vec4(m, 1.0);
 }
 
 // Performs a box blur in a single direction, sampling `color_texture_b`.
@@ -233,33 +250,37 @@ fn box_blur_a(frag_coord: vec4<f32>, coc: f32, frag_offset: vec2<f32>) -> vec4<f
 // * `frag_offset` is the vector, in screen-space units, from one sample to the
 //   next. This need not be horizontal or vertical.
 #ifdef DUAL_INPUT
-fn box_blur_b(frag_coord: vec4<f32>, coc: f32, frag_offset: vec2<f32>) -> vec4<f32> {
+fn box_blur_b(frag_coord: vec4<f32>, coc: f32, pixelation: f32, frag_offset: vec2<f32>) -> vec4<f32> {
     let support = i32(round(coc * 0.5));
-    let uv = frag_coord.xy / vec2<f32>(textureDimensions(color_texture_b));
+    let rounded = floor(frag_coord.xy / pixelation);
+    let dither_offset = rounded % vec2(2.0, 2.0) * (1.0 - pixelation % 2.0);
+    let uv = (rounded * pixelation + dither_offset) / vec2<f32>(textureDimensions(color_texture_a));
     let offset = frag_offset / vec2<f32>(textureDimensions(color_texture_b));
 
     // Accumulate samples in a single direction.
-    var sum = vec3(0.0);
+    var m = vec3(0.0);
     for (var i = 0; i <= support; i += 1) {
-        sum += textureSampleLevel(
-            color_texture_b, color_texture_sampler, uv + offset * f32(i), 0.0).rgb;
+        m = max(m, textureSampleLevel(
+            color_texture_b, color_texture_sampler, uv + offset * f32(i), 0.0).rgb);
     }
 
-    return vec4(sum / vec3(1.0 + f32(support)), 1.0);
+    return vec4(m, 1.0);
 }
 #endif
 
 // Calculates the horizontal component of the separable Gaussian blur.
 @fragment
 fn gaussian_horizontal(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    let coc = calculate_circle_of_confusion(in.position);
+    let depth = sample_depth(in.position);
+    let coc = calculate_circle_of_confusion(depth);
     return gaussian_blur(in.position, coc, vec2(1.0, 0.0));
 }
 
 // Calculates the vertical component of the separable Gaussian blur.
 @fragment
 fn gaussian_vertical(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    let coc = calculate_circle_of_confusion(in.position);
+    let depth = sample_depth(in.position);
+    let coc = calculate_circle_of_confusion(depth);
     return gaussian_blur(in.position, coc, vec2(0.0, 1.0));
 }
 
@@ -273,14 +294,21 @@ fn gaussian_vertical(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
 //       │
 @fragment
 fn bokeh_pass_0(in: FullscreenVertexOutput) -> DualOutput {
-    let coc = calculate_circle_of_confusion(in.position);
-    let vertical = box_blur_a(in.position, coc, vec2(0.0, 1.0));
-    let diagonal = box_blur_a(in.position, coc, vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
+    let depth = sample_depth(in.position);
+    let pixelation = calculate_pixelation_factor(depth);
+    var coc: f32;
+    if pixelation > 1.0 {
+        coc = 1.0;
+    } else {
+        coc = calculate_circle_of_confusion(depth);
+    }
+    let vertical = box_blur_a(in.position, coc, pixelation, vec2(0.0, 1.0));
+    let diagonal = box_blur_a(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
 
     // Note that the diagonal part is pre-mixed with the vertical component.
     var output: DualOutput;
     output.output_0 = vertical;
-    output.output_1 = mix(vertical, diagonal, 0.5);
+    output.output_1 = max(vertical, diagonal);
     return output;
 }
 
@@ -293,9 +321,16 @@ fn bokeh_pass_0(in: FullscreenVertexOutput) -> DualOutput {
 #ifdef DUAL_INPUT
 @fragment
 fn bokeh_pass_1(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    let coc = calculate_circle_of_confusion(in.position);
-    let output_0 = box_blur_a(in.position, coc, vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
-    let output_1 = box_blur_b(in.position, coc, vec2(COS_NEG_FRAC_PI_5_6, SIN_NEG_FRAC_PI_5_6));
+    let depth = sample_depth(in.position);
+    let pixelation = calculate_pixelation_factor(depth);
+    var coc: f32;
+    if pixelation > 1.0 {
+        coc = 1.0;
+    } else {
+        coc = calculate_circle_of_confusion(depth);
+    }
+    let output_0 = box_blur_a(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
+    let output_1 = box_blur_b(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_5_6, SIN_NEG_FRAC_PI_5_6));
     return mix(output_0, output_1, 0.5);
 }
 #endif
