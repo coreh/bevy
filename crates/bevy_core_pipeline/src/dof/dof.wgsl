@@ -107,31 +107,21 @@ const COS_NEG_FRAC_PI_5_6: f32 = -0.8660254037844387;
 // sin(-150°), used for the bokeh blur.
 const SIN_NEG_FRAC_PI_5_6: f32 = -0.5;
 
-fn sample_depth(in_frag_coord: vec4<f32>) -> f32 {
-    var depth = dof_params.max_depth;
-
-    // Sample the depth.
-    for (var x = -1; x <= 1; x += 1) {
-        for (var y = -1; y <= 1; y += 1) {
-            let frag_coord = vec2<i32>(floor(in_frag_coord.xy)) + vec2(x, y);
-            let raw_depth = textureLoad(depth_texture, frag_coord, 0);
-            depth = min(-depth_ndc_to_view_z(raw_depth), depth);
-        }
-    }
-
-    return depth;
-}
-
 // Calculates and returns the diameter (not the radius) of the [circle of
 // confusion].
 //
 // [circle of confusion]: https://en.wikipedia.org/wiki/Circle_of_confusion
-fn calculate_circle_of_confusion(depth: f32) -> f32 {
+fn calculate_circle_of_confusion(in_frag_coord: vec4<f32>) -> f32 {
     // Unpack the depth of field parameters.
     let focus = dof_params.focal_distance;
     let f = dof_params.focal_length;
     let scale = dof_params.coc_scale_factor;
     let max_coc_diameter = dof_params.max_circle_of_confusion_diameter;
+
+    // Sample the depth.
+    let frag_coord = vec2<i32>(floor(in_frag_coord.xy));
+    let raw_depth = textureLoad(depth_texture, frag_coord, 0);
+    let depth = min(-depth_ndc_to_view_z(raw_depth), dof_params.max_depth);
 
     // Calculate the circle of confusion.
     //
@@ -144,8 +134,19 @@ fn calculate_circle_of_confusion(depth: f32) -> f32 {
     return clamp(candidate_coc * framebuffer_size.y, 0.0, max_coc_diameter);
 }
 
-fn calculate_pixelation_factor(depth: f32) -> f32 {
-    return ceil(max(1.0, 1.0 / (depth / 2.5)));
+fn calculate_pixelation_factor(in_frag_coord: vec4<f32>) -> f32 {
+    var depth = dof_params.max_depth;
+
+    // Sample the depth.
+    for (var x = -1; x <= 1; x += 1) {
+        for (var y = -1; y <= 1; y += 1) {
+            let frag_coord = vec2<i32>(floor(in_frag_coord.xy)) + vec2(x, y);
+            let raw_depth = textureLoad(depth_texture, frag_coord, 0);
+            depth = min(-depth_ndc_to_view_z(raw_depth), depth);
+        }
+    }
+
+    return round(max(1.0, 1.0 / (depth / 3.0)));
 }
 
 // Performs a single direction of the separable Gaussian blur kernel.
@@ -271,16 +272,14 @@ fn box_blur_b(frag_coord: vec4<f32>, coc: f32, pixelation: f32, frag_offset: vec
 // Calculates the horizontal component of the separable Gaussian blur.
 @fragment
 fn gaussian_horizontal(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    let depth = sample_depth(in.position);
-    let coc = calculate_circle_of_confusion(depth);
+    let coc = calculate_circle_of_confusion(in.position);
     return gaussian_blur(in.position, coc, vec2(1.0, 0.0));
 }
 
 // Calculates the vertical component of the separable Gaussian blur.
 @fragment
 fn gaussian_vertical(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    let depth = sample_depth(in.position);
-    let coc = calculate_circle_of_confusion(depth);
+    let coc = calculate_circle_of_confusion(in.position);
     return gaussian_blur(in.position, coc, vec2(0.0, 1.0));
 }
 
@@ -294,14 +293,8 @@ fn gaussian_vertical(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
 //       │
 @fragment
 fn bokeh_pass_0(in: FullscreenVertexOutput) -> DualOutput {
-    let depth = sample_depth(in.position);
-    let pixelation = calculate_pixelation_factor(depth);
-    var coc: f32;
-    if pixelation > 1.0 {
-        coc = 1.0;
-    } else {
-        coc = calculate_circle_of_confusion(depth);
-    }
+    let coc = calculate_circle_of_confusion(in.position);
+    let pixelation = calculate_pixelation_factor(in.position);
     let vertical = box_blur_a(in.position, coc, pixelation, vec2(0.0, 1.0));
     let diagonal = box_blur_a(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
 
@@ -321,14 +314,8 @@ fn bokeh_pass_0(in: FullscreenVertexOutput) -> DualOutput {
 #ifdef DUAL_INPUT
 @fragment
 fn bokeh_pass_1(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    let depth = sample_depth(in.position);
-    let pixelation = calculate_pixelation_factor(depth);
-    var coc: f32;
-    if pixelation > 1.0 {
-        coc = 1.0;
-    } else {
-        coc = calculate_circle_of_confusion(depth);
-    }
+    let coc = calculate_circle_of_confusion(in.position);
+    let pixelation = calculate_pixelation_factor(in.position);
     let output_0 = box_blur_a(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_6, SIN_NEG_FRAC_PI_6));
     let output_1 = box_blur_b(in.position, coc, pixelation, vec2(COS_NEG_FRAC_PI_5_6, SIN_NEG_FRAC_PI_5_6));
     return mix(output_0, output_1, 0.5);
