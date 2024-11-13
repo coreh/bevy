@@ -122,15 +122,17 @@ fn calculate_circle_of_confusion(in_frag_coord: vec4<f32>) -> f32 {
     let frag_coord = vec2<i32>(floor(in_frag_coord.xy));
     let raw_depth = textureLoad(depth_texture, frag_coord, 0);
     let depth = min(-depth_ndc_to_view_z(raw_depth), dof_params.max_depth);
+    let framebuffer_size = vec2<f32>(textureDimensions(color_texture_a));
+    let uv = (in_frag_coord.xy / framebuffer_size - vec2(0.5)) * 2.0;
+    let distance = length(vec3(uv.x, uv.y, depth));
 
     // Calculate the circle of confusion.
     //
     // This is just the formula from Wikipedia [1].
     //
     // [1]: https://en.wikipedia.org/wiki/Circle_of_confusion#Determining_a_circle_of_confusion_diameter_from_the_object_field
-    let candidate_coc = scale * abs(depth - focus) / (depth * (focus - f));
+    let candidate_coc = scale * abs(distance - focus) / (distance * (focus - f));
 
-    let framebuffer_size = vec2<f32>(textureDimensions(color_texture_a));
     return clamp(candidate_coc * framebuffer_size.y, 0.0, max_coc_diameter);
 }
 
