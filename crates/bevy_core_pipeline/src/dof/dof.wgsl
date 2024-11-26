@@ -151,10 +151,12 @@ fn calculate_pixelation_factor(in_frag_coord: vec4<f32>) -> f32 {
     }
 
     let framebuffer_size = vec2<f32>(textureDimensions(color_texture_a));
+    let uv = (in_frag_coord.xy / framebuffer_size - vec2(0.5)) * 2.0;
+    let distance = length(vec3(uv.x, uv.y, depth));
 
     let max_pixelation = ceil(max(framebuffer_size.x, framebuffer_size.y) / 150.0);
 
-    return min(1.0 / ((depth * (0.95 + 0.05 * cos(2.0 * in_frag_coord.x / depth) * cos(2.0 * in_frag_coord.y / depth))) / focus), max_pixelation);
+    return min(1.0 / (distance  / focus), max_pixelation);
 }
 
 // Performs a single direction of the separable Gaussian blur kernel.
