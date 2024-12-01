@@ -163,6 +163,7 @@ pub struct GpuClusterableObject {
     pub(crate) soft_shadow_size: f32,
     pub(crate) shadow_map_near_z: f32,
     pub(crate) pad_a: f32,
+    #[cfg(not(feature = "spectral_lighting"))]
     pub(crate) pad_b: f32,
 }
 

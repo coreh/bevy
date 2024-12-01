@@ -11,13 +11,14 @@ struct ClusterableObject {
     shadow_depth_bias: f32,
     shadow_normal_bias: f32,
     spot_light_tan_angle: f32,
-#ifdef SPECTRAL_LIGHTING
-    monochromaticity: f32,
-#endif
     soft_shadow_size: f32,
     shadow_map_near_z: f32,
     pad_a: f32,
+#ifdef SPECTRAL_LIGHTING
+    monochromaticity: f32,
+#else
     pad_b: f32,
+#endif
 };
 
 const POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT: u32   = 1u;

@@ -958,9 +958,10 @@ pub fn prepare_lights(
             shadow_normal_bias: light.shadow_normal_bias,
             shadow_map_near_z: light.shadow_map_near_z,
             spot_light_tan_angle,
+            pad_a: 0.0,
             #[cfg(feature = "spectral_lighting")]
             monochromaticity: light.monochromaticity,
-            pad_a: 0.0,
+            #[cfg(not(feature = "spectral_lighting"))]
             pad_b: 0.0,
             soft_shadow_size: if light.soft_shadows_enabled {
                 light.radius
