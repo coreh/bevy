@@ -1,41 +1,33 @@
-use crate::serde::de::error_utils::make_custom_error;
-use crate::serde::de::helpers::ExpectedValues;
-use crate::serde::de::registration_utils::try_get_registration;
-use crate::serde::de::struct_utils::{visit_struct, visit_struct_seq};
-use crate::serde::de::tuple_utils::{visit_tuple, TupleLikeInfo};
-use crate::serde::TypedReflectDeserializer;
 use crate::{
+    serde::{
+        de::{
+            error_utils::make_custom_error,
+            helpers::ExpectedValues,
+            registration_utils::try_get_registration,
+            struct_utils::{visit_struct, visit_struct_seq},
+            tuple_utils::{visit_tuple, TupleLikeInfo},
+        },
+        TypedReflectDeserializer,
+    },
     DynamicEnum, DynamicStruct, DynamicTuple, DynamicVariant, EnumInfo, StructVariantInfo,
     TupleVariantInfo, TypeRegistration, TypeRegistry, VariantInfo,
 };
-use core::fmt::Formatter;
+use core::{fmt, fmt::Formatter};
 use serde::de::{DeserializeSeed, EnumAccess, Error, MapAccess, SeqAccess, VariantAccess, Visitor};
-use std::fmt;
+
+use super::ReflectDeserializerProcessor;
 
 /// A [`Visitor`] for deserializing [`Enum`] values.
 ///
 /// [`Enum`]: crate::Enum
-pub(super) struct EnumVisitor<'a> {
-    enum_info: &'static EnumInfo,
-    registration: &'a TypeRegistration,
-    registry: &'a TypeRegistry,
+pub(super) struct EnumVisitor<'a, P> {
+    pub enum_info: &'static EnumInfo,
+    pub registration: &'a TypeRegistration,
+    pub registry: &'a TypeRegistry,
+    pub processor: Option<&'a mut P>,
 }
 
-impl<'a> EnumVisitor<'a> {
-    pub fn new(
-        enum_info: &'static EnumInfo,
-        registration: &'a TypeRegistration,
-        registry: &'a TypeRegistry,
-    ) -> Self {
-        Self {
-            enum_info,
-            registration,
-            registry,
-        }
-    }
-}
-
-impl<'a, 'de> Visitor<'de> for EnumVisitor<'a> {
+impl<'de, P: ReflectDeserializerProcessor> Visitor<'de> for EnumVisitor<'_, P> {
     type Value = DynamicEnum;
 
     fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
@@ -60,6 +52,7 @@ impl<'a, 'de> Visitor<'de> for EnumVisitor<'a> {
                         struct_info,
                         registration: self.registration,
                         registry: self.registry,
+                        processor: self.processor,
                     },
                 )?
                 .into(),
@@ -68,9 +61,12 @@ impl<'a, 'de> Visitor<'de> for EnumVisitor<'a> {
                     *TupleLikeInfo::field_at(tuple_info, 0)?.ty(),
                     self.registry,
                 )?;
-                let value = variant.newtype_variant_seed(
-                    TypedReflectDeserializer::new_internal(registration, self.registry),
-                )?;
+                let value =
+                    variant.newtype_variant_seed(TypedReflectDeserializer::new_internal(
+                        registration,
+                        self.registry,
+                        self.processor,
+                    ))?;
                 let mut dynamic_tuple = DynamicTuple::default();
                 dynamic_tuple.insert_boxed(value);
                 dynamic_tuple.into()
@@ -82,6 +78,7 @@ impl<'a, 'de> Visitor<'de> for EnumVisitor<'a> {
                         tuple_info,
                         registration: self.registration,
                         registry: self.registry,
+                        processor: self.processor,
                     },
                 )?
                 .into(),
@@ -148,13 +145,14 @@ impl<'de> DeserializeSeed<'de> for VariantDeserializer {
     }
 }
 
-struct StructVariantVisitor<'a> {
+struct StructVariantVisitor<'a, P> {
     struct_info: &'static StructVariantInfo,
     registration: &'a TypeRegistration,
     registry: &'a TypeRegistry,
+    processor: Option<&'a mut P>,
 }
 
-impl<'a, 'de> Visitor<'de> for StructVariantVisitor<'a> {
+impl<'de, P: ReflectDeserializerProcessor> Visitor<'de> for StructVariantVisitor<'_, P> {
     type Value = DynamicStruct;
 
     fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
@@ -165,24 +163,37 @@ impl<'a, 'de> Visitor<'de> for StructVariantVisitor<'a> {
     where
         A: SeqAccess<'de>,
     {
-        visit_struct_seq(&mut seq, self.struct_info, self.registration, self.registry)
+        visit_struct_seq(
+            &mut seq,
+            self.struct_info,
+            self.registration,
+            self.registry,
+            self.processor,
+        )
     }
 
     fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
     where
         V: MapAccess<'de>,
     {
-        visit_struct(&mut map, self.struct_info, self.registration, self.registry)
+        visit_struct(
+            &mut map,
+            self.struct_info,
+            self.registration,
+            self.registry,
+            self.processor,
+        )
     }
 }
 
-struct TupleVariantVisitor<'a> {
+struct TupleVariantVisitor<'a, P> {
     tuple_info: &'static TupleVariantInfo,
     registration: &'a TypeRegistration,
     registry: &'a TypeRegistry,
+    processor: Option<&'a mut P>,
 }
 
-impl<'a, 'de> Visitor<'de> for TupleVariantVisitor<'a> {
+impl<'de, P: ReflectDeserializerProcessor> Visitor<'de> for TupleVariantVisitor<'_, P> {
     type Value = DynamicTuple;
 
     fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
@@ -193,6 +204,12 @@ impl<'a, 'de> Visitor<'de> for TupleVariantVisitor<'a> {
     where
         V: SeqAccess<'de>,
     {
-        visit_tuple(&mut seq, self.tuple_info, self.registration, self.registry)
+        visit_tuple(
+            &mut seq,
+            self.tuple_info,
+            self.registration,
+            self.registry,
+            self.processor,
+        )
     }
 }

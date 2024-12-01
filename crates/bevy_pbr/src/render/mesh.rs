@@ -1,19 +1,20 @@
-use std::mem::{self, size_of};
+use core::mem::{self, size_of};
 
 use allocator::MeshAllocator;
 use bevy_asset::{load_internal_asset, AssetId};
 use bevy_core_pipeline::{
     core_3d::{AlphaMask3d, Opaque3d, Transmissive3d, Transparent3d, CORE_3D_DEPTH_FORMAT},
     deferred::{AlphaMask3dDeferred, Opaque3dDeferred},
+    oit::{prepare_oit_buffers, OrderIndependentTransparencySettingsOffset},
     prepass::MotionVectorPrepass,
 };
 use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::entity::EntityHashMap;
 use bevy_ecs::{
     prelude::*,
     query::ROQueryItem,
     system::{lifetimeless::*, SystemParamItem, SystemState},
 };
+use bevy_image::{BevyDefault, ImageSampler, TextureFormatPixelInfo};
 use bevy_math::{Affine3, Rect, UVec2, Vec3, Vec4};
 use bevy_render::{
     batching::{
@@ -32,7 +33,7 @@ use bevy_render::{
     },
     render_resource::*,
     renderer::{RenderDevice, RenderQueue},
-    texture::{BevyDefault, DefaultImageSampler, ImageSampler, TextureFormatPixelInfo},
+    texture::DefaultImageSampler,
     view::{
         prepare_view_targets, GpuCulling, RenderLayers, RenderVisibilityRanges, ViewTarget,
         ViewUniformOffset, ViewVisibility, VisibilityRange,
@@ -40,19 +41,26 @@ use bevy_render::{
     Extract,
 };
 use bevy_transform::components::GlobalTransform;
-use bevy_utils::{tracing::error, tracing::warn, Entry, HashMap, Parallel};
+use bevy_utils::{
+    tracing::{error, warn},
+    Entry, HashMap, Parallel,
+};
 
+use crate::{
+    render::{
+        morph::{
+            extract_morphs, no_automatic_morph_batching, prepare_morphs, MorphIndices,
+            MorphUniforms,
+        },
+        skin::no_automatic_skin_batching,
+    },
+    *,
+};
+use bevy_render::sync_world::{MainEntity, MainEntityHashMap};
 use bytemuck::{Pod, Zeroable};
 use nonmax::{NonMaxU16, NonMaxU32};
+use smallvec::{smallvec, SmallVec};
 use static_assertions::const_assert_eq;
-
-use crate::render::{
-    morph::{
-        extract_morphs, no_automatic_morph_batching, prepare_morphs, MorphIndices, MorphUniforms,
-    },
-    skin::no_automatic_skin_batching,
-};
-use crate::*;
 
 use self::irradiance_volume::IRRADIANCE_VOLUMES_ARE_USABLE;
 
@@ -157,11 +165,13 @@ impl Plugin for MeshRenderPlugin {
                 .add_systems(
                     Render,
                     (
-                        set_mesh_motion_vector_flags.before(RenderSet::Queue),
+                        set_mesh_motion_vector_flags.in_set(RenderSet::PrepareAssets),
                         prepare_skins.in_set(RenderSet::PrepareResources),
                         prepare_morphs.in_set(RenderSet::PrepareResources),
                         prepare_mesh_bind_group.in_set(RenderSet::PrepareBindGroups),
-                        prepare_mesh_view_bind_groups.in_set(RenderSet::PrepareBindGroups),
+                        prepare_mesh_view_bind_groups
+                            .in_set(RenderSet::PrepareBindGroups)
+                            .after(prepare_oit_buffers),
                         no_gpu_preprocessing::clear_batched_cpu_instance_buffers::<MeshPipeline>
                             .in_set(RenderSet::Cleanup)
                             .after(RenderSet::Render),
@@ -202,7 +212,11 @@ impl Plugin for MeshRenderPlugin {
                                 .after(prepare_view_targets),
                             collect_meshes_for_gpu_building
                                 .in_set(RenderSet::PrepareAssets)
-                                .after(allocator::allocate_and_free_meshes),
+                                .after(allocator::allocate_and_free_meshes)
+                                // This must be before
+                                // `set_mesh_motion_vector_flags` so it doesn't
+                                // overwrite those flags.
+                                .before(set_mesh_motion_vector_flags),
                         ),
                     );
             } else {
@@ -548,11 +562,11 @@ pub enum RenderMeshInstanceGpuQueue {
     /// The version of [`RenderMeshInstanceGpuQueue`] that omits the
     /// [`MeshCullingData`], so that we don't waste space when GPU
     /// culling is disabled.
-    CpuCulling(Vec<(Entity, RenderMeshInstanceGpuBuilder)>),
+    CpuCulling(Vec<(MainEntity, RenderMeshInstanceGpuBuilder)>),
     /// The version of [`RenderMeshInstanceGpuQueue`] that contains the
     /// [`MeshCullingData`], used when any view has GPU culling
     /// enabled.
-    GpuCulling(Vec<(Entity, RenderMeshInstanceGpuBuilder, MeshCullingData)>),
+    GpuCulling(Vec<(MainEntity, RenderMeshInstanceGpuBuilder, MeshCullingData)>),
 }
 
 /// The per-thread queues containing mesh instances, populated during the
@@ -566,7 +580,7 @@ pub struct RenderMeshInstanceGpuQueues(Parallel<RenderMeshInstanceGpuQueue>);
 impl RenderMeshInstanceShared {
     fn from_components(
         previous_transform: Option<&PreviousGlobalTransform>,
-        handle: &Handle<Mesh>,
+        mesh: &Mesh3d,
         not_shadow_caster: bool,
         no_automatic_batching: bool,
         render_layers: Option<RenderLayers>,
@@ -583,7 +597,7 @@ impl RenderMeshInstanceShared {
         );
 
         RenderMeshInstanceShared {
-            mesh_asset_id: handle.id(),
+            mesh_asset_id: mesh.id(),
             render_layers,
             flags: mesh_instance_flags,
             material_bind_group_id: AtomicMaterialBindGroupId::default(),
@@ -616,12 +630,12 @@ pub enum RenderMeshInstances {
 /// Information that the render world keeps about each entity that contains a
 /// mesh, when using CPU mesh instance data building.
 #[derive(Default, Deref, DerefMut)]
-pub struct RenderMeshInstancesCpu(EntityHashMap<RenderMeshInstanceCpu>);
+pub struct RenderMeshInstancesCpu(MainEntityHashMap<RenderMeshInstanceCpu>);
 
 /// Information that the render world keeps about each entity that contains a
 /// mesh, when using GPU mesh instance data building.
 #[derive(Default, Deref, DerefMut)]
-pub struct RenderMeshInstancesGpu(EntityHashMap<RenderMeshInstanceGpu>);
+pub struct RenderMeshInstancesGpu(MainEntityHashMap<RenderMeshInstanceGpu>);
 
 impl RenderMeshInstances {
     /// Creates a new [`RenderMeshInstances`] instance.
@@ -634,7 +648,7 @@ impl RenderMeshInstances {
     }
 
     /// Returns the ID of the mesh asset attached to the given entity, if any.
-    pub(crate) fn mesh_asset_id(&self, entity: Entity) -> Option<AssetId<Mesh>> {
+    pub(crate) fn mesh_asset_id(&self, entity: MainEntity) -> Option<AssetId<Mesh>> {
         match *self {
             RenderMeshInstances::CpuBuilding(ref instances) => instances.mesh_asset_id(entity),
             RenderMeshInstances::GpuBuilding(ref instances) => instances.mesh_asset_id(entity),
@@ -643,7 +657,7 @@ impl RenderMeshInstances {
 
     /// Constructs [`RenderMeshQueueData`] for the given entity, if it has a
     /// mesh attached.
-    pub fn render_mesh_queue_data(&self, entity: Entity) -> Option<RenderMeshQueueData> {
+    pub fn render_mesh_queue_data(&self, entity: MainEntity) -> Option<RenderMeshQueueData> {
         match *self {
             RenderMeshInstances::CpuBuilding(ref instances) => {
                 instances.render_mesh_queue_data(entity)
@@ -656,7 +670,7 @@ impl RenderMeshInstances {
 
     /// Inserts the given flags into the CPU or GPU render mesh instance data
     /// for the given mesh as appropriate.
-    fn insert_mesh_instance_flags(&mut self, entity: Entity, flags: RenderMeshInstanceFlags) {
+    fn insert_mesh_instance_flags(&mut self, entity: MainEntity, flags: RenderMeshInstanceFlags) {
         match *self {
             RenderMeshInstances::CpuBuilding(ref mut instances) => {
                 instances.insert_mesh_instance_flags(entity, flags);
@@ -669,12 +683,12 @@ impl RenderMeshInstances {
 }
 
 impl RenderMeshInstancesCpu {
-    fn mesh_asset_id(&self, entity: Entity) -> Option<AssetId<Mesh>> {
+    fn mesh_asset_id(&self, entity: MainEntity) -> Option<AssetId<Mesh>> {
         self.get(&entity)
             .map(|render_mesh_instance| render_mesh_instance.mesh_asset_id)
     }
 
-    fn render_mesh_queue_data(&self, entity: Entity) -> Option<RenderMeshQueueData> {
+    fn render_mesh_queue_data(&self, entity: MainEntity) -> Option<RenderMeshQueueData> {
         self.get(&entity)
             .map(|render_mesh_instance| RenderMeshQueueData {
                 shared: &render_mesh_instance.shared,
@@ -684,7 +698,7 @@ impl RenderMeshInstancesCpu {
 
     /// Inserts the given flags into the render mesh instance data for the given
     /// mesh.
-    fn insert_mesh_instance_flags(&mut self, entity: Entity, flags: RenderMeshInstanceFlags) {
+    fn insert_mesh_instance_flags(&mut self, entity: MainEntity, flags: RenderMeshInstanceFlags) {
         if let Some(instance) = self.get_mut(&entity) {
             instance.flags.insert(flags);
         }
@@ -692,12 +706,12 @@ impl RenderMeshInstancesCpu {
 }
 
 impl RenderMeshInstancesGpu {
-    fn mesh_asset_id(&self, entity: Entity) -> Option<AssetId<Mesh>> {
+    fn mesh_asset_id(&self, entity: MainEntity) -> Option<AssetId<Mesh>> {
         self.get(&entity)
             .map(|render_mesh_instance| render_mesh_instance.mesh_asset_id)
     }
 
-    fn render_mesh_queue_data(&self, entity: Entity) -> Option<RenderMeshQueueData> {
+    fn render_mesh_queue_data(&self, entity: MainEntity) -> Option<RenderMeshQueueData> {
         self.get(&entity)
             .map(|render_mesh_instance| RenderMeshQueueData {
                 shared: &render_mesh_instance.shared,
@@ -707,7 +721,7 @@ impl RenderMeshInstancesGpu {
 
     /// Inserts the given flags into the render mesh instance data for the given
     /// mesh.
-    fn insert_mesh_instance_flags(&mut self, entity: Entity, flags: RenderMeshInstanceFlags) {
+    fn insert_mesh_instance_flags(&mut self, entity: MainEntity, flags: RenderMeshInstanceFlags) {
         if let Some(instance) = self.get_mut(&entity) {
             instance.flags.insert(flags);
         }
@@ -732,7 +746,7 @@ impl RenderMeshInstanceGpuQueue {
     /// Adds a new mesh to this queue.
     fn push(
         &mut self,
-        entity: Entity,
+        entity: MainEntity,
         instance_builder: RenderMeshInstanceGpuBuilder,
         culling_data_builder: Option<MeshCullingData>,
     ) {
@@ -765,8 +779,8 @@ impl RenderMeshInstanceGpuBuilder {
     /// [`MeshInputUniform`] tables.
     fn add_to(
         self,
-        entity: Entity,
-        render_mesh_instances: &mut EntityHashMap<RenderMeshInstanceGpu>,
+        entity: MainEntity,
+        render_mesh_instances: &mut MainEntityHashMap<RenderMeshInstanceGpu>,
         current_input_buffer: &mut RawBufferVec<MeshInputUniform>,
         mesh_allocator: &MeshAllocator,
     ) -> usize {
@@ -876,7 +890,7 @@ pub fn extract_meshes_for_cpu_building(
             &GlobalTransform,
             Option<&PreviousGlobalTransform>,
             Option<&RenderLayers>,
-            &Handle<Mesh>,
+            &Mesh3d,
             Has<NotShadowReceiver>,
             Has<TransmittedShadowReceiver>,
             Has<NotShadowCaster>,
@@ -894,7 +908,7 @@ pub fn extract_meshes_for_cpu_building(
             transform,
             previous_transform,
             render_layers,
-            handle,
+            mesh,
             not_shadow_receiver,
             transmitted_receiver,
             not_shadow_caster,
@@ -907,7 +921,7 @@ pub fn extract_meshes_for_cpu_building(
 
             let mut lod_index = None;
             if visibility_range {
-                lod_index = render_visibility_ranges.lod_index_for_entity(entity);
+                lod_index = render_visibility_ranges.lod_index_for_entity(entity.into());
             }
 
             let mesh_flags = MeshFlags::from_components(
@@ -919,7 +933,7 @@ pub fn extract_meshes_for_cpu_building(
 
             let shared = RenderMeshInstanceShared::from_components(
                 previous_transform,
-                handle,
+                mesh,
                 not_shadow_caster,
                 no_automatic_batching,
                 render_layers.map(|render_layers| render_layers.clone()),
@@ -955,7 +969,7 @@ pub fn extract_meshes_for_cpu_building(
     render_mesh_instances.clear();
     for queue in render_mesh_instance_queues.iter_mut() {
         for (entity, render_mesh_instance) in queue.drain(..) {
-            render_mesh_instances.insert_unique_unchecked(entity, render_mesh_instance);
+            render_mesh_instances.insert_unique_unchecked(entity.into(), render_mesh_instance);
         }
     }
 }
@@ -978,7 +992,7 @@ pub fn extract_meshes_for_gpu_building(
             Option<&Lightmap>,
             Option<&Aabb>,
             Option<&RenderLayers>,
-            &Handle<Mesh>,
+            &Mesh3d,
             Has<NotShadowReceiver>,
             Has<TransmittedShadowReceiver>,
             Has<NotShadowCaster>,
@@ -1013,7 +1027,7 @@ pub fn extract_meshes_for_gpu_building(
             lightmap,
             aabb,
             render_layers,
-            handle,
+            mesh,
             not_shadow_receiver,
             transmitted_receiver,
             not_shadow_caster,
@@ -1026,7 +1040,7 @@ pub fn extract_meshes_for_gpu_building(
 
             let mut lod_index = None;
             if visibility_range {
-                lod_index = render_visibility_ranges.lod_index_for_entity(entity);
+                lod_index = render_visibility_ranges.lod_index_for_entity(entity.into());
             }
 
             let mesh_flags = MeshFlags::from_components(
@@ -1038,7 +1052,7 @@ pub fn extract_meshes_for_gpu_building(
 
             let shared = RenderMeshInstanceShared::from_components(
                 previous_transform,
-                handle,
+                mesh,
                 not_shadow_caster,
                 no_automatic_batching,
                 render_layers.map(|render_layers| render_layers.clone()),
@@ -1053,7 +1067,7 @@ pub fn extract_meshes_for_gpu_building(
                 .contains(RenderMeshInstanceFlags::HAS_PREVIOUS_TRANSFORM)
             {
                 render_mesh_instances
-                    .get(&entity)
+                    .get(&MainEntity::from(entity))
                     .map(|render_mesh_instance| render_mesh_instance.current_uniform_index)
             } else {
                 None
@@ -1067,7 +1081,11 @@ pub fn extract_meshes_for_gpu_building(
                 previous_input_index,
             };
 
-            queue.push(entity, gpu_mesh_instance_builder, gpu_mesh_culling_data);
+            queue.push(
+                entity.into(),
+                gpu_mesh_instance_builder,
+                gpu_mesh_culling_data,
+            );
         },
     );
 }
@@ -1289,7 +1307,7 @@ impl GetBatchData for MeshPipeline {
 
     fn get_batch_data(
         (mesh_instances, lightmaps, _, mesh_allocator): &SystemParamItem<Self::Param>,
-        entity: Entity,
+        (_entity, main_entity): (Entity, MainEntity),
     ) -> Option<(Self::BufferData, Option<Self::CompareData>)> {
         let RenderMeshInstances::CpuBuilding(ref mesh_instances) = **mesh_instances else {
             error!(
@@ -1298,13 +1316,13 @@ impl GetBatchData for MeshPipeline {
             );
             return None;
         };
-        let mesh_instance = mesh_instances.get(&entity)?;
+        let mesh_instance = mesh_instances.get(&main_entity)?;
         let first_vertex_index =
             match mesh_allocator.mesh_vertex_slice(&mesh_instance.mesh_asset_id) {
                 Some(mesh_vertex_slice) => mesh_vertex_slice.range.start,
                 None => 0,
             };
-        let maybe_lightmap = lightmaps.render_lightmaps.get(&entity);
+        let maybe_lightmap = lightmaps.render_lightmaps.get(&main_entity);
 
         Some((
             MeshUniform::new(
@@ -1327,7 +1345,7 @@ impl GetFullBatchData for MeshPipeline {
 
     fn get_index_and_compare_data(
         (mesh_instances, lightmaps, _, _): &SystemParamItem<Self::Param>,
-        entity: Entity,
+        (_entity, main_entity): (Entity, MainEntity),
     ) -> Option<(NonMaxU32, Option<Self::CompareData>)> {
         // This should only be called during GPU building.
         let RenderMeshInstances::GpuBuilding(ref mesh_instances) = **mesh_instances else {
@@ -1338,8 +1356,8 @@ impl GetFullBatchData for MeshPipeline {
             return None;
         };
 
-        let mesh_instance = mesh_instances.get(&entity)?;
-        let maybe_lightmap = lightmaps.render_lightmaps.get(&entity);
+        let mesh_instance = mesh_instances.get(&main_entity)?;
+        let maybe_lightmap = lightmaps.render_lightmaps.get(&main_entity);
 
         Some((
             mesh_instance.current_uniform_index,
@@ -1353,7 +1371,7 @@ impl GetFullBatchData for MeshPipeline {
 
     fn get_binned_batch_data(
         (mesh_instances, lightmaps, _, mesh_allocator): &SystemParamItem<Self::Param>,
-        entity: Entity,
+        (_entity, main_entity): (Entity, MainEntity),
     ) -> Option<Self::BufferData> {
         let RenderMeshInstances::CpuBuilding(ref mesh_instances) = **mesh_instances else {
             error!(
@@ -1361,13 +1379,13 @@ impl GetFullBatchData for MeshPipeline {
             );
             return None;
         };
-        let mesh_instance = mesh_instances.get(&entity)?;
+        let mesh_instance = mesh_instances.get(&main_entity)?;
         let first_vertex_index =
             match mesh_allocator.mesh_vertex_slice(&mesh_instance.mesh_asset_id) {
                 Some(mesh_vertex_slice) => mesh_vertex_slice.range.start,
                 None => 0,
             };
-        let maybe_lightmap = lightmaps.render_lightmaps.get(&entity);
+        let maybe_lightmap = lightmaps.render_lightmaps.get(&main_entity);
 
         Some(MeshUniform::new(
             &mesh_instance.transforms,
@@ -1379,7 +1397,7 @@ impl GetFullBatchData for MeshPipeline {
 
     fn get_binned_index(
         (mesh_instances, _, _, _): &SystemParamItem<Self::Param>,
-        entity: Entity,
+        (_entity, main_entity): (Entity, MainEntity),
     ) -> Option<NonMaxU32> {
         // This should only be called during GPU building.
         let RenderMeshInstances::GpuBuilding(ref mesh_instances) = **mesh_instances else {
@@ -1391,14 +1409,14 @@ impl GetFullBatchData for MeshPipeline {
         };
 
         mesh_instances
-            .get(&entity)
+            .get(&main_entity)
             .map(|entity| entity.current_uniform_index)
     }
 
     fn get_batch_indirect_parameters_index(
         (mesh_instances, _, meshes, mesh_allocator): &SystemParamItem<Self::Param>,
         indirect_parameters_buffer: &mut IndirectParametersBuffer,
-        entity: Entity,
+        entity: (Entity, MainEntity),
         instance_index: u32,
     ) -> Option<NonMaxU32> {
         get_batch_indirect_parameters_index(
@@ -1420,7 +1438,7 @@ fn get_batch_indirect_parameters_index(
     meshes: &RenderAssets<RenderMesh>,
     mesh_allocator: &MeshAllocator,
     indirect_parameters_buffer: &mut IndirectParametersBuffer,
-    entity: Entity,
+    (_entity, main_entity): (Entity, MainEntity),
     instance_index: u32,
 ) -> Option<NonMaxU32> {
     // This should only be called during GPU building.
@@ -1432,7 +1450,7 @@ fn get_batch_indirect_parameters_index(
         return None;
     };
 
-    let mesh_instance = mesh_instances.get(&entity)?;
+    let mesh_instance = mesh_instances.get(&main_entity)?;
     let mesh = meshes.get(mesh_instance.mesh_asset_id)?;
     let vertex_buffer_slice = mesh_allocator.mesh_vertex_slice(&mesh_instance.mesh_asset_id)?;
 
@@ -1500,7 +1518,8 @@ bitflags::bitflags! {
         const SCREEN_SPACE_REFLECTIONS          = 1 << 16;
         const HAS_PREVIOUS_SKIN                 = 1 << 17;
         const HAS_PREVIOUS_MORPH                = 1 << 18;
-        const LAST_FLAG                         = Self::HAS_PREVIOUS_MORPH.bits();
+        const OIT_ENABLED                       = 1 << 19;
+        const LAST_FLAG                         = Self::OIT_ENABLED.bits();
 
         // Bitfields
         const MSAA_RESERVED_BITS                = Self::MSAA_MASK_BITS << Self::MSAA_SHIFT_BITS;
@@ -1517,8 +1536,8 @@ bitflags::bitflags! {
         const TONEMAP_METHOD_ACES_FITTED        = 3 << Self::TONEMAP_METHOD_SHIFT_BITS;
         const TONEMAP_METHOD_AGX                = 4 << Self::TONEMAP_METHOD_SHIFT_BITS;
         const TONEMAP_METHOD_SOMEWHAT_BORING_DISPLAY_TRANSFORM = 5 << Self::TONEMAP_METHOD_SHIFT_BITS;
-        const TONEMAP_METHOD_TONY_MC_MAPFACE     = 6 << Self::TONEMAP_METHOD_SHIFT_BITS;
-        const TONEMAP_METHOD_BLENDER_FILMIC      = 7 << Self::TONEMAP_METHOD_SHIFT_BITS;
+        const TONEMAP_METHOD_TONY_MC_MAPFACE    = 6 << Self::TONEMAP_METHOD_SHIFT_BITS;
+        const TONEMAP_METHOD_BLENDER_FILMIC     = 7 << Self::TONEMAP_METHOD_SHIFT_BITS;
         const SHADOW_FILTER_METHOD_RESERVED_BITS = Self::SHADOW_FILTER_METHOD_MASK_BITS << Self::SHADOW_FILTER_METHOD_SHIFT_BITS;
         const SHADOW_FILTER_METHOD_HARDWARE_2X2  = 0 << Self::SHADOW_FILTER_METHOD_SHIFT_BITS;
         const SHADOW_FILTER_METHOD_GAUSSIAN      = 1 << Self::SHADOW_FILTER_METHOD_SHIFT_BITS;
@@ -1529,10 +1548,10 @@ bitflags::bitflags! {
         const VIEW_PROJECTION_ORTHOGRAPHIC      = 2 << Self::VIEW_PROJECTION_SHIFT_BITS;
         const VIEW_PROJECTION_RESERVED          = 3 << Self::VIEW_PROJECTION_SHIFT_BITS;
         const SCREEN_SPACE_SPECULAR_TRANSMISSION_RESERVED_BITS = Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_MASK_BITS << Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_SHIFT_BITS;
-        const SCREEN_SPACE_SPECULAR_TRANSMISSION_LOW = 0 << Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_SHIFT_BITS;
+        const SCREEN_SPACE_SPECULAR_TRANSMISSION_LOW    = 0 << Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_SHIFT_BITS;
         const SCREEN_SPACE_SPECULAR_TRANSMISSION_MEDIUM = 1 << Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_SHIFT_BITS;
-        const SCREEN_SPACE_SPECULAR_TRANSMISSION_HIGH = 2 << Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_SHIFT_BITS;
-        const SCREEN_SPACE_SPECULAR_TRANSMISSION_ULTRA = 3 << Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_SHIFT_BITS;
+        const SCREEN_SPACE_SPECULAR_TRANSMISSION_HIGH   = 2 << Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_SHIFT_BITS;
+        const SCREEN_SPACE_SPECULAR_TRANSMISSION_ULTRA  = 3 << Self::SCREEN_SPACE_SPECULAR_TRANSMISSION_SHIFT_BITS;
         const ALL_RESERVED_BITS =
             Self::BLEND_RESERVED_BITS.bits() |
             Self::MSAA_RESERVED_BITS.bits() |
@@ -1761,7 +1780,15 @@ impl SpecializedMeshPipeline for MeshPipeline {
         let (label, blend, depth_write_enabled);
         let pass = key.intersection(MeshPipelineKey::BLEND_RESERVED_BITS);
         let (mut is_opaque, mut alpha_to_coverage_enabled) = (false, false);
-        if pass == MeshPipelineKey::BLEND_ALPHA {
+        if key.contains(MeshPipelineKey::OIT_ENABLED) && pass == MeshPipelineKey::BLEND_ALPHA {
+            label = "oit_mesh_pipeline".into();
+            // TODO tail blending would need alpha blending
+            blend = None;
+            shader_defs.push("OIT_ENABLED".into());
+            // TODO it should be possible to use this to combine MSAA and OIT
+            // alpha_to_coverage_enabled = true;
+            depth_write_enabled = false;
+        } else if pass == MeshPipelineKey::BLEND_ALPHA {
             label = "alpha_blend_mesh_pipeline".into();
             blend = Some(BlendState::ALPHA_BLENDING);
             // For the transparent pass, fragments that are closer will be alpha blended
@@ -1855,15 +1882,18 @@ impl SpecializedMeshPipeline for MeshPipeline {
         #[cfg(feature = "spectral_lighting")]
         shader_defs.push("SPECTRAL_LIGHTING".into());
 
+        #[cfg(feature = "experimental_pbr_pcss")]
+        shader_defs.push("PCSS_SAMPLERS_AVAILABLE".into());
+
         if key.contains(MeshPipelineKey::TONEMAP_IN_SHADER) {
             shader_defs.push("TONEMAP_IN_SHADER".into());
             shader_defs.push(ShaderDefVal::UInt(
                 "TONEMAPPING_LUT_TEXTURE_BINDING_INDEX".into(),
-                23,
+                TONEMAPPING_LUT_TEXTURE_BINDING_INDEX,
             ));
             shader_defs.push(ShaderDefVal::UInt(
                 "TONEMAPPING_LUT_SAMPLER_BINDING_INDEX".into(),
-                24,
+                TONEMAPPING_LUT_SAMPLER_BINDING_INDEX,
             ));
 
             let method = key.intersection(MeshPipelineKey::TONEMAP_METHOD_RESERVED_BITS);
@@ -2014,6 +2044,7 @@ impl SpecializedMeshPipeline for MeshPipeline {
                 alpha_to_coverage_enabled,
             },
             label: Some(label),
+            zero_initialize_workgroup_memory: false,
         })
     }
 }
@@ -2192,6 +2223,7 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetMeshViewBindGroup<I> 
         Read<ViewScreenSpaceReflectionsUniformOffset>,
         Read<ViewEnvironmentMapUniformOffset>,
         Read<MeshViewBindGroup>,
+        Option<Read<OrderIndependentTransparencySettingsOffset>>,
     );
     type ItemQuery = ();
 
@@ -2206,23 +2238,24 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetMeshViewBindGroup<I> 
             view_ssr,
             view_environment_map,
             mesh_view_bind_group,
+            maybe_oit_layers_count_offset,
         ): ROQueryItem<'w, Self::ViewQuery>,
         _entity: Option<()>,
         _: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_bind_group(
-            I,
-            &mesh_view_bind_group.value,
-            &[
-                view_uniform.offset,
-                view_lights.offset,
-                view_fog.offset,
-                **view_light_probes,
-                **view_ssr,
-                **view_environment_map,
-            ],
-        );
+        let mut offsets: SmallVec<[u32; 8]> = smallvec![
+            view_uniform.offset,
+            view_lights.offset,
+            view_fog.offset,
+            **view_light_probes,
+            **view_ssr,
+            **view_environment_map,
+        ];
+        if let Some(layers_count_offset) = maybe_oit_layers_count_offset {
+            offsets.push(layers_count_offset.offset);
+        }
+        pass.set_bind_group(I, &mesh_view_bind_group.value, &offsets);
 
         RenderCommandResult::Success
     }
@@ -2257,7 +2290,7 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetMeshBindGroup<I> {
         let skin_indices = skin_indices.into_inner();
         let morph_indices = morph_indices.into_inner();
 
-        let entity = &item.entity();
+        let entity = &item.main_entity();
 
         let Some(mesh_asset_id) = mesh_instances.mesh_asset_id(*entity) else {
             return RenderCommandResult::Success;
@@ -2378,7 +2411,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawMesh {
         let indirect_parameters_buffer = indirect_parameters_buffer.into_inner();
         let mesh_allocator = mesh_allocator.into_inner();
 
-        let Some(mesh_asset_id) = mesh_instances.mesh_asset_id(item.entity()) else {
+        let Some(mesh_asset_id) = mesh_instances.mesh_asset_id(item.main_entity()) else {
             return RenderCommandResult::Skip;
         };
         let Some(gpu_mesh) = meshes.get(mesh_asset_id) else {

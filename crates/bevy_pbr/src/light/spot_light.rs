@@ -1,11 +1,15 @@
+use bevy_render::view::Visibility;
+
 use super::*;
 
 /// A light that emits light in a given direction from a central point.
+///
 /// Behaves like a point light in a perfectly absorbent housing that
 /// shines light only in a given direction. The direction is taken from
 /// the transform, and can be specified with [`Transform::looking_at`](Transform::looking_at).
 #[derive(Component, Debug, Clone, Copy, Reflect)]
 #[reflect(Component, Default, Debug)]
+#[require(Frustum, VisibleMeshEntities, Transform, Visibility)]
 pub struct SpotLight {
     /// The color of the light.
     ///
@@ -53,6 +57,7 @@ pub struct SpotLight {
     ///
     /// Note that soft shadows are significantly more expensive to render than
     /// hard shadows.
+    #[cfg(feature = "experimental_pbr_pcss")]
     pub soft_shadows_enabled: bool,
 
     /// A value that adjusts the tradeoff between self-shadowing artifacts and
@@ -118,12 +123,13 @@ impl Default for SpotLight {
             range: 20.0,
             radius: 0.0,
             shadows_enabled: false,
-            soft_shadows_enabled: false,
             shadow_depth_bias: Self::DEFAULT_SHADOW_DEPTH_BIAS,
             shadow_normal_bias: Self::DEFAULT_SHADOW_NORMAL_BIAS,
             shadow_map_near_z: Self::DEFAULT_SHADOW_MAP_NEAR_Z,
             inner_angle: 0.0,
-            outer_angle: std::f32::consts::FRAC_PI_4,
+            outer_angle: core::f32::consts::FRAC_PI_4,
+            #[cfg(feature = "experimental_pbr_pcss")]
+            soft_shadows_enabled: false,
             #[cfg(feature = "spectral_lighting")]
             monochromaticity: 0.0,
         }

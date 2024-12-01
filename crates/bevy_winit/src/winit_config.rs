@@ -18,7 +18,7 @@ impl WinitSettings {
     pub fn game() -> Self {
         WinitSettings {
             focused_mode: UpdateMode::Continuous,
-            unfocused_mode: UpdateMode::reactive_low_power(Duration::from_secs_f64(1.0 / 60.0)), // 60Hz,
+            unfocused_mode: UpdateMode::reactive_low_power(Duration::from_secs_f64(1.0 / 60.0)), /* 60Hz, */
         }
     }
 
@@ -32,6 +32,19 @@ impl WinitSettings {
         WinitSettings {
             focused_mode: UpdateMode::reactive(Duration::from_secs(5)),
             unfocused_mode: UpdateMode::reactive_low_power(Duration::from_secs(60)),
+        }
+    }
+
+    /// Default settings for mobile.
+    ///
+    /// [`Reactive`](UpdateMode::Reactive) if windows have focus,
+    /// [`reactive_low_power`](UpdateMode::reactive_low_power) otherwise.
+    ///
+    /// Use the [`EventLoopProxy`](crate::EventLoopProxy) to request a redraw from outside bevy.
+    pub fn mobile() -> Self {
+        WinitSettings {
+            focused_mode: UpdateMode::reactive(Duration::from_secs_f32(1.0 / 60.0)),
+            unfocused_mode: UpdateMode::reactive_low_power(Duration::from_secs(1)),
         }
     }
 

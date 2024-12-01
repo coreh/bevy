@@ -1,25 +1,19 @@
-use crate::serde::ser::error_utils::make_custom_error;
-use crate::serde::{SerializationData, TypedReflectSerializer};
-use crate::{TupleStruct, TypeInfo, TypeRegistry};
-use serde::ser::SerializeTupleStruct;
-use serde::Serialize;
+use crate::{
+    serde::{ser::error_utils::make_custom_error, SerializationData, TypedReflectSerializer},
+    TupleStruct, TypeInfo, TypeRegistry,
+};
+use serde::{ser::SerializeTupleStruct, Serialize};
+
+use super::ReflectSerializerProcessor;
 
 /// A serializer for [`TupleStruct`] values.
-pub(super) struct TupleStructSerializer<'a> {
-    tuple_struct: &'a dyn TupleStruct,
-    registry: &'a TypeRegistry,
+pub(super) struct TupleStructSerializer<'a, P> {
+    pub tuple_struct: &'a dyn TupleStruct,
+    pub registry: &'a TypeRegistry,
+    pub processor: Option<&'a P>,
 }
 
-impl<'a> TupleStructSerializer<'a> {
-    pub fn new(tuple_struct: &'a dyn TupleStruct, registry: &'a TypeRegistry) -> Self {
-        Self {
-            tuple_struct,
-            registry,
-        }
-    }
-}
-
-impl<'a> Serialize for TupleStructSerializer<'a> {
+impl<P: ReflectSerializerProcessor> Serialize for TupleStructSerializer<'_, P> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -48,6 +42,15 @@ impl<'a> Serialize for TupleStructSerializer<'a> {
             .get(type_info.type_id())
             .and_then(|registration| registration.data::<SerializationData>());
         let ignored_len = serialization_data.map(SerializationData::len).unwrap_or(0);
+
+        if self.tuple_struct.field_len() == 1 && serialization_data.is_none() {
+            let field = self.tuple_struct.field(0).unwrap();
+            return serializer.serialize_newtype_struct(
+                tuple_struct_info.type_path_table().ident().unwrap(),
+                &TypedReflectSerializer::new_internal(field, self.registry, self.processor),
+            );
+        }
+
         let mut state = serializer.serialize_tuple_struct(
             tuple_struct_info.type_path_table().ident().unwrap(),
             self.tuple_struct.field_len() - ignored_len,
@@ -60,7 +63,11 @@ impl<'a> Serialize for TupleStructSerializer<'a> {
             {
                 continue;
             }
-            state.serialize_field(&TypedReflectSerializer::new_internal(value, self.registry))?;
+            state.serialize_field(&TypedReflectSerializer::new_internal(
+                value,
+                self.registry,
+                self.processor,
+            ))?;
         }
         state.end()
     }

@@ -3,14 +3,14 @@ use super::compensation_curve::{
 };
 use bevy_asset::prelude::*;
 use bevy_ecs::prelude::*;
+use bevy_image::Image;
 use bevy_render::{
     globals::GlobalsUniform,
     render_resource::{binding_types::*, *},
     renderer::RenderDevice,
-    texture::Image,
     view::ViewUniform,
 };
-use std::num::NonZero;
+use core::num::NonZero;
 
 #[derive(Resource)]
 pub struct AutoExposurePipeline {
@@ -89,6 +89,7 @@ impl SpecializedComputePipeline for AutoExposurePipeline {
                 AutoExposurePass::Average => "compute_average".into(),
             },
             push_constant_ranges: vec![],
+            zero_initialize_workgroup_memory: false,
         }
     }
 }

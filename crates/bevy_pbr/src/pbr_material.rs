@@ -7,10 +7,10 @@ use bevy_render::{
 };
 use bitflags::bitflags;
 
-use crate::deferred::DEFAULT_PBR_DEFERRED_LIGHTING_PASS_ID;
-use crate::*;
+use crate::{deferred::DEFAULT_PBR_DEFERRED_LIGHTING_PASS_ID, *};
 
 /// An enum to define which UV attribute to use for a texture.
+///
 /// It is used for every texture in the [`StandardMaterial`].
 /// It only supports two UV attributes, [`bevy_render::mesh::Mesh::ATTRIBUTE_UV_0`] and
 /// [`bevy_render::mesh::Mesh::ATTRIBUTE_UV_1`].
@@ -128,7 +128,6 @@ pub struct StandardMaterial {
     ///
     /// 0.089 is the minimum floating point value that won't be rounded down to 0 in the
     /// calculations used.
-    //
     // Technically for 32-bit floats, 0.045 could be used.
     // See <https://google.github.io/filament/Filament.html#materialsystem/parameterization/>
     pub perceptual_roughness: f32,
@@ -388,7 +387,7 @@ pub struct StandardMaterial {
 
     /// Specifies the level of exposure to ambient light.
     ///
-    /// This is usually generated and stored automatically ("baked") by 3D-modelling software.
+    /// This is usually generated and stored automatically ("baked") by 3D-modeling software.
     ///
     /// Typically, steep concave parts of a model (such as the armpit of a shirt) are darker,
     /// because they have little exposure to light.
@@ -600,7 +599,7 @@ pub struct StandardMaterial {
 
     /// The depth map used for [parallax mapping].
     ///
-    /// It is a greyscale image where white represents bottom and black the top.
+    /// It is a grayscale image where white represents bottom and black the top.
     /// If this field is set, bevy will apply [parallax mapping].
     /// Parallax mapping, unlike simple normal maps, will move the texture
     /// coordinate according to the current perspective,
@@ -914,7 +913,7 @@ pub struct StandardMaterialUniform {
     // Use a color for user-friendliness even though we technically don't use the alpha channel
     // Might be used in the future for exposure correction in HDR
     pub emissive: Vec4,
-    /// Color white light takes after travelling through the attenuation distance underneath the material surface
+    /// Color white light takes after traveling through the attenuation distance underneath the material surface
     pub attenuation_color: Vec4,
     /// The transform applied to the UVs corresponding to `ATTRIBUTE_UV_0` on the mesh before sampling. Default is identity.
     pub uv_transform: Mat3,

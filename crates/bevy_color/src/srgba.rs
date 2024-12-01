@@ -1,12 +1,11 @@
-use crate::color_difference::EuclideanDistance;
 use crate::{
-    impl_componentwise_vector_space, Alpha, ColorToComponents, ColorToPacked, Gray, LinearRgba,
-    Luminance, Mix, StandardColor, Xyza,
+    color_difference::EuclideanDistance, impl_componentwise_vector_space, Alpha, ColorToComponents,
+    ColorToPacked, Gray, LinearRgba, Luminance, Mix, StandardColor, Xyza,
 };
 use bevy_math::{ops, Vec3, Vec4};
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::prelude::*;
-use thiserror::Error;
+use derive_more::derive::{Display, Error, From};
 
 /// Non-linear standard RGB with alpha.
 #[doc = include_str!("../docs/conversion.md")]
@@ -185,7 +184,6 @@ impl Srgba {
     /// * `b` - Blue channel. [0, 255]
     ///
     /// See also [`Srgba::new`], [`Srgba::rgba_u8`], [`Srgba::hex`].
-    ///
     pub fn rgb_u8(r: u8, g: u8, b: u8) -> Self {
         Self::from_u8_array_no_alpha([r, g, b])
     }
@@ -202,7 +200,6 @@ impl Srgba {
     /// * `a` - Alpha channel. [0, 255]
     ///
     /// See also [`Srgba::new`], [`Srgba::rgb_u8`], [`Srgba::hex`].
-    ///
     pub fn rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self::from_u8_array([r, g, b, a])
     }
@@ -424,16 +421,17 @@ impl From<Srgba> for Xyza {
 }
 
 /// Error returned if a hex string could not be parsed as a color.
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, Display, PartialEq, Eq, From)]
 pub enum HexColorError {
     /// Parsing error.
-    #[error("Invalid hex string")]
-    Parse(#[from] std::num::ParseIntError),
+    #[display("Invalid hex string")]
+    Parse(core::num::ParseIntError),
     /// Invalid length.
-    #[error("Unexpected length of hex string")]
+    #[display("Unexpected length of hex string")]
     Length,
     /// Invalid character.
-    #[error("Invalid hex char")]
+    #[display("Invalid hex char")]
+    #[error(ignore)]
     Char(char),
 }
 

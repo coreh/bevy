@@ -36,11 +36,13 @@
 //! [`EntityWorldMut::insert`]: crate::world::EntityWorldMut::insert
 //! [`EntityWorldMut::remove`]: crate::world::EntityWorldMut::remove
 mod map_entities;
+mod visit_entities;
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
 #[cfg(all(feature = "bevy_reflect", feature = "serialize"))]
 use bevy_reflect::{ReflectDeserialize, ReflectSerialize};
 pub use map_entities::*;
+pub use visit_entities::*;
 
 mod hash;
 pub use hash::*;
@@ -57,12 +59,12 @@ use crate::{
     },
     storage::{SparseSetIndex, TableId, TableRow},
 };
+use core::{fmt, hash::Hash, mem, num::NonZero, sync::atomic::Ordering};
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
-use std::{fmt, hash::Hash, mem, num::NonZero, sync::atomic::Ordering};
 
 #[cfg(target_has_atomic = "64")]
-use std::sync::atomic::AtomicI64 as AtomicIdCursor;
+use core::sync::atomic::AtomicI64 as AtomicIdCursor;
 #[cfg(target_has_atomic = "64")]
 type IdCursor = i64;
 
@@ -70,7 +72,7 @@ type IdCursor = i64;
 /// do not. This fallback allows compilation using a 32-bit cursor instead, with
 /// the caveat that some conversions may fail (and panic) at runtime.
 #[cfg(not(target_has_atomic = "64"))]
-use std::sync::atomic::AtomicIsize as AtomicIdCursor;
+use core::sync::atomic::AtomicIsize as AtomicIdCursor;
 #[cfg(not(target_has_atomic = "64"))]
 type IdCursor = isize;
 
@@ -144,13 +146,14 @@ type IdCursor = isize;
 /// [SemVer]: https://semver.org/
 #[derive(Clone, Copy)]
 #[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
-#[cfg_attr(feature = "bevy_reflect", reflect_value(Hash, PartialEq, Debug))]
+#[cfg_attr(feature = "bevy_reflect", reflect(opaque))]
+#[cfg_attr(feature = "bevy_reflect", reflect(Hash, PartialEq, Debug))]
 #[cfg_attr(
     all(feature = "bevy_reflect", feature = "serialize"),
-    reflect_value(Serialize, Deserialize)
+    reflect(Serialize, Deserialize)
 )]
 // Alignment repr necessary to allow LLVM to better output
-// optimised codegen for `to_bits`, `PartialEq` and `Ord`.
+// optimized codegen for `to_bits`, `PartialEq` and `Ord`.
 #[repr(C, align(8))]
 pub struct Entity {
     // Do not reorder the fields here. The ordering is explicitly used by repr(C)
@@ -167,7 +170,7 @@ pub struct Entity {
 impl PartialEq for Entity {
     #[inline]
     fn eq(&self, other: &Entity) -> bool {
-        // By using `to_bits`, the codegen can be optimised out even
+        // By using `to_bits`, the codegen can be optimized out even
         // further potentially. Relies on the correct alignment/field
         // order of `Entity`.
         self.to_bits() == other.to_bits()
@@ -176,29 +179,29 @@ impl PartialEq for Entity {
 
 impl Eq for Entity {}
 
-// The derive macro codegen output is not optimal and can't be optimised as well
+// The derive macro codegen output is not optimal and can't be optimized as well
 // by the compiler. This impl resolves the issue of non-optimal codegen by relying
 // on comparing against the bit representation of `Entity` instead of comparing
-// the fields. The result is then LLVM is able to optimise the codegen for Entity
+// the fields. The result is then LLVM is able to optimize the codegen for Entity
 // far beyond what the derive macro can.
 // See <https://github.com/rust-lang/rust/issues/106107>
 impl PartialOrd for Entity {
     #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         // Make use of our `Ord` impl to ensure optimal codegen output
         Some(self.cmp(other))
     }
 }
 
-// The derive macro codegen output is not optimal and can't be optimised as well
+// The derive macro codegen output is not optimal and can't be optimized as well
 // by the compiler. This impl resolves the issue of non-optimal codegen by relying
 // on comparing against the bit representation of `Entity` instead of comparing
-// the fields. The result is then LLVM is able to optimise the codegen for Entity
+// the fields. The result is then LLVM is able to optimize the codegen for Entity
 // far beyond what the derive macro can.
 // See <https://github.com/rust-lang/rust/issues/106107>
 impl Ord for Entity {
     #[inline]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         // This will result in better codegen for ordering comparisons, plus
         // avoids pitfalls with regards to macro codegen relying on property
         // position when we want to compare against the bit representation.
@@ -208,7 +211,7 @@ impl Ord for Entity {
 
 impl Hash for Entity {
     #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.to_bits().hash(state);
     }
 }
@@ -307,7 +310,7 @@ impl Entity {
 
         match id {
             Ok(entity) => entity,
-            Err(_) => panic!("Attempted to initialise invalid bits as an entity"),
+            Err(_) => panic!("Attempted to initialize invalid bits as an entity"),
         }
     }
 
@@ -394,6 +397,8 @@ impl<'de> Deserialize<'de> for Entity {
 ///
 /// This takes the format: `{index}v{generation}#{bits}`.
 ///
+/// For [`Entity::PLACEHOLDER`], this outputs `PLACEHOLDER`.
+///
 /// # Usage
 ///
 /// Prefer to use this format for debugging and logging purposes. Because the output contains
@@ -413,22 +418,32 @@ impl<'de> Deserialize<'de> for Entity {
 /// ```
 impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}v{}#{}",
-            self.index(),
-            self.generation(),
-            self.to_bits()
-        )
+        if self == &Self::PLACEHOLDER {
+            write!(f, "PLACEHOLDER")
+        } else {
+            write!(
+                f,
+                "{}v{}#{}",
+                self.index(),
+                self.generation(),
+                self.to_bits()
+            )
+        }
     }
 }
 
 /// Outputs the short entity identifier, including the index and generation.
 ///
 /// This takes the format: `{index}v{generation}`.
+///
+/// For [`Entity::PLACEHOLDER`], this outputs `PLACEHOLDER`.
 impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}v{}", self.index(), self.generation())
+        if self == &Self::PLACEHOLDER {
+            write!(f, "PLACEHOLDER")
+        } else {
+            write!(f, "{}v{}", self.index(), self.generation())
+        }
     }
 }
 
@@ -450,26 +465,26 @@ pub struct ReserveEntitiesIterator<'a> {
     meta: &'a [EntityMeta],
 
     // Reserved indices formerly in the freelist to hand out.
-    index_iter: std::slice::Iter<'a, u32>,
+    freelist_indices: core::slice::Iter<'a, u32>,
 
     // New Entity indices to hand out, outside the range of meta.len().
-    index_range: std::ops::Range<u32>,
+    new_indices: core::ops::Range<u32>,
 }
 
 impl<'a> Iterator for ReserveEntitiesIterator<'a> {
     type Item = Entity;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.index_iter
+        self.freelist_indices
             .next()
             .map(|&index| {
                 Entity::from_raw_and_generation(index, self.meta[index as usize].generation)
             })
-            .or_else(|| self.index_range.next().map(Entity::from_raw))
+            .or_else(|| self.new_indices.next().map(Entity::from_raw))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = self.index_iter.len() + self.index_range.len();
+        let len = self.freelist_indices.len() + self.new_indices.len();
         (len, Some(len))
     }
 }
@@ -589,8 +604,8 @@ impl Entities {
 
         ReserveEntitiesIterator {
             meta: &self.meta[..],
-            index_iter: self.pending[freelist_range].iter(),
-            index_range: new_id_start..new_id_end,
+            freelist_indices: self.pending[freelist_range].iter(),
+            new_indices: new_id_start..new_id_end,
         }
     }
 
@@ -1159,7 +1174,7 @@ mod tests {
     // part of the best-case performance changes in PR#9903.
     #[test]
     fn entity_hash_keeps_similar_ids_together() {
-        use std::hash::BuildHasher;
+        use core::hash::BuildHasher;
         let hash = EntityHash;
 
         let first_id = 0xC0FFEE << 8;
@@ -1174,7 +1189,7 @@ mod tests {
 
     #[test]
     fn entity_hash_id_bitflip_affects_high_7_bits() {
-        use std::hash::BuildHasher;
+        use core::hash::BuildHasher;
 
         let hash = EntityHash;
 
@@ -1192,16 +1207,21 @@ mod tests {
     fn entity_debug() {
         let entity = Entity::from_raw(42);
         let string = format!("{:?}", entity);
-        assert!(string.contains("42"));
-        assert!(string.contains("v1"));
-        assert!(string.contains(format!("#{}", entity.to_bits()).as_str()));
+        assert_eq!(string, "42v1#4294967338");
+
+        let entity = Entity::PLACEHOLDER;
+        let string = format!("{:?}", entity);
+        assert_eq!(string, "PLACEHOLDER");
     }
 
     #[test]
     fn entity_display() {
         let entity = Entity::from_raw(42);
         let string = format!("{}", entity);
-        assert!(string.contains("42"));
-        assert!(string.contains("v1"));
+        assert_eq!(string, "42v1");
+
+        let entity = Entity::PLACEHOLDER;
+        let string = format!("{}", entity);
+        assert_eq!(string, "PLACEHOLDER");
     }
 }

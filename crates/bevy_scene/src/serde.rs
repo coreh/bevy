@@ -2,20 +2,20 @@
 
 use crate::{DynamicEntity, DynamicScene};
 use bevy_ecs::entity::Entity;
-use bevy_reflect::serde::{TypedReflectDeserializer, TypedReflectSerializer};
-use bevy_reflect::PartialReflect;
 use bevy_reflect::{
-    serde::{ReflectDeserializer, TypeRegistrationDeserializer},
-    TypeRegistry,
+    serde::{
+        ReflectDeserializer, TypeRegistrationDeserializer, TypedReflectDeserializer,
+        TypedReflectSerializer,
+    },
+    PartialReflect, ReflectFromReflect, TypeRegistry,
 };
 use bevy_utils::HashSet;
-use serde::ser::SerializeMap;
+use core::fmt::Formatter;
 use serde::{
     de::{DeserializeSeed, Error, MapAccess, SeqAccess, Visitor},
-    ser::SerializeStruct,
+    ser::{SerializeMap, SerializeStruct},
     Deserialize, Deserializer, Serialize, Serializer,
 };
-use std::fmt::Formatter;
 
 /// Name of the serialized scene struct type.
 pub const SCENE_STRUCT: &str = "Scene";
@@ -237,7 +237,7 @@ struct SceneVisitor<'a> {
 impl<'a, 'de> Visitor<'de> for SceneVisitor<'a> {
     type Value = DynamicScene;
 
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter) -> core::fmt::Result {
         formatter.write_str("scene struct")
     }
 
@@ -326,7 +326,7 @@ struct SceneEntitiesVisitor<'a> {
 impl<'a, 'de> Visitor<'de> for SceneEntitiesVisitor<'a> {
     type Value = Vec<DynamicEntity>;
 
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter) -> core::fmt::Result {
         formatter.write_str("map of entities")
     }
 
@@ -381,7 +381,7 @@ struct SceneEntityVisitor<'a> {
 impl<'a, 'de> Visitor<'de> for SceneEntityVisitor<'a> {
     type Value = DynamicEntity;
 
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter) -> core::fmt::Result {
         formatter.write_str("entities")
     }
 
@@ -456,7 +456,7 @@ struct SceneMapVisitor<'a> {
 impl<'a, 'de> Visitor<'de> for SceneMapVisitor<'a> {
     type Value = Vec<Box<dyn PartialReflect>>;
 
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter) -> core::fmt::Result {
         formatter.write_str("map of reflect types")
     }
 
@@ -499,19 +499,21 @@ impl<'a, 'de> Visitor<'de> for SceneMapVisitor<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ron;
-    use crate::serde::{SceneDeserializer, SceneSerializer};
-    use crate::{DynamicScene, DynamicSceneBuilder};
-    use bevy_ecs::entity::EntityHashMap;
-    use bevy_ecs::entity::{Entity, EntityMapper, MapEntities};
-    use bevy_ecs::prelude::{Component, ReflectComponent, ReflectResource, Resource, World};
-    use bevy_ecs::query::{With, Without};
-    use bevy_ecs::reflect::{AppTypeRegistry, ReflectMapEntities};
-    use bevy_ecs::world::FromWorld;
-    use bevy_reflect::{Reflect, ReflectSerialize};
+    use crate::{
+        ron,
+        serde::{SceneDeserializer, SceneSerializer},
+        DynamicScene, DynamicSceneBuilder,
+    };
+    use bevy_ecs::{
+        entity::{Entity, EntityHashMap, VisitEntities, VisitEntitiesMut},
+        prelude::{Component, ReflectComponent, ReflectResource, Resource, World},
+        query::{With, Without},
+        reflect::{AppTypeRegistry, ReflectMapEntities},
+        world::FromWorld,
+    };
+    use bevy_reflect::{Reflect, ReflectDeserialize, ReflectSerialize};
     use bincode::Options;
-    use serde::de::DeserializeSeed;
-    use serde::Serialize;
+    use serde::{de::DeserializeSeed, Deserialize, Serialize};
     use std::io::BufReader;
 
     #[derive(Component, Reflect, Default)]
@@ -548,15 +550,9 @@ mod tests {
         foo: i32,
     }
 
-    #[derive(Clone, Component, Reflect, PartialEq)]
+    #[derive(Clone, Component, Reflect, PartialEq, VisitEntities, VisitEntitiesMut)]
     #[reflect(Component, MapEntities, PartialEq)]
     struct MyEntityRef(Entity);
-
-    impl MapEntities for MyEntityRef {
-        fn map_entities<M: EntityMapper>(&mut self, entity_mapper: &mut M) {
-            self.0 = entity_mapper.map_entity(self.0);
-        }
-    }
 
     impl FromWorld for MyEntityRef {
         fn from_world(_world: &mut World) -> Self {
@@ -744,7 +740,7 @@ mod tests {
         assert!(dst_world
             .query_filtered::<&MyEntityRef, With<Foo>>()
             .iter(&dst_world)
-            .all(|r| world.get_entity(r.0).is_none()));
+            .all(|r| world.get_entity(r.0).is_err()));
     }
 
     #[test]
@@ -915,7 +911,7 @@ mod tests {
         }
     }
 
-    /// These tests just verify that that the [`assert_scene_eq`] function is working properly for our tests.
+    /// These tests just verify that the [`assert_scene_eq`] function is working properly for our tests.
     mod assert_scene_eq_tests {
         use super::*;
 

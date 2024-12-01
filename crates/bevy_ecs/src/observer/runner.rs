@@ -1,4 +1,4 @@
-use std::any::Any;
+use core::any::Any;
 
 use crate::{
     component::{ComponentHook, ComponentHooks, ComponentId, StorageType},
@@ -70,7 +70,7 @@ impl Component for ObserverState {
             });
         });
         hooks.on_remove(|mut world, entity, _| {
-            let descriptor = std::mem::take(
+            let descriptor = core::mem::take(
                 &mut world
                     .entity_mut(entity)
                     .get_mut::<ObserverState>()
@@ -86,8 +86,9 @@ impl Component for ObserverState {
 }
 
 /// Type for function that is run when an observer is triggered.
+///
 /// Typically refers to the default runner that runs the system stored in the associated [`Observer`] component,
-/// but can be overridden for custom behaviour.
+/// but can be overridden for custom behavior.
 pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: &mut bool);
 
 /// An [`Observer`] system. Add this [`Component`] to an [`Entity`] to turn it into an "observer".
@@ -110,7 +111,7 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: 
 ///     message: String,
 /// }
 ///
-/// world.observe(|trigger: Trigger<Speak>| {
+/// world.add_observer(|trigger: Trigger<Speak>| {
 ///     println!("{}", trigger.event().message);
 /// });
 ///
@@ -123,7 +124,7 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: 
 /// });
 /// ```
 ///
-/// Notice that we used [`World::observe`]. This is just a shorthand for spawning an [`Observer`] manually:
+/// Notice that we used [`World::add_observer`]. This is just a shorthand for spawning an [`Observer`] manually:
 ///
 /// ```
 /// # use bevy_ecs::prelude::*;
@@ -131,7 +132,7 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: 
 /// # #[derive(Event)]
 /// # struct Speak;
 /// // These are functionally the same:
-/// world.observe(|trigger: Trigger<Speak>| {});
+/// world.add_observer(|trigger: Trigger<Speak>| {});
 /// world.spawn(Observer::new(|trigger: Trigger<Speak>| {}));
 /// ```
 ///
@@ -144,7 +145,7 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: 
 /// # struct PrintNames;
 /// # #[derive(Component, Debug)]
 /// # struct Name;
-/// world.observe(|trigger: Trigger<PrintNames>, names: Query<&Name>| {
+/// world.add_observer(|trigger: Trigger<PrintNames>, names: Query<&Name>| {
 ///     for name in &names {
 ///         println!("{name:?}");
 ///     }
@@ -162,7 +163,7 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: 
 /// # struct SpawnThing;
 /// # #[derive(Component, Debug)]
 /// # struct Thing;
-/// world.observe(|trigger: Trigger<SpawnThing>, mut commands: Commands| {
+/// world.add_observer(|trigger: Trigger<SpawnThing>, mut commands: Commands| {
 ///     commands.spawn(Thing);
 /// });
 /// ```
@@ -176,7 +177,7 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: 
 /// # struct A;
 /// # #[derive(Event)]
 /// # struct B;
-/// world.observe(|trigger: Trigger<A>, mut commands: Commands| {
+/// world.add_observer(|trigger: Trigger<A>, mut commands: Commands| {
 ///     commands.trigger(B);
 /// });
 /// ```
@@ -194,7 +195,7 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: 
 /// #[derive(Event)]
 /// struct Explode;
 ///
-/// world.observe(|trigger: Trigger<Explode>, mut commands: Commands| {
+/// world.add_observer(|trigger: Trigger<Explode>, mut commands: Commands| {
 ///     println!("Entity {:?} goes BOOM!", trigger.entity());
 ///     commands.entity(trigger.entity()).despawn();
 /// });
@@ -357,13 +358,6 @@ fn observer_system_runner<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
         propagate,
         observer_trigger,
     );
-    // SAFETY: the static lifetime is encapsulated in Trigger / cannot leak out.
-    // Additionally, IntoObserverSystem is only implemented for functions starting
-    // with for<'a> Trigger<'a>, meaning users cannot specify Trigger<'static> manually,
-    // allowing the Trigger<'static> to be moved outside of the context of the system.
-    // This transmute is obviously not ideal, but it is safe. Ideally we can remove the
-    // static constraint from ObserverSystem, but so far we have not found a way.
-    let trigger: Trigger<'static, E, B> = unsafe { std::mem::transmute(trigger) };
     // SAFETY:
     // - observer was triggered so must have an `Observer` component.
     // - observer cannot be dropped or mutated until after the system pointer is already dropped.
@@ -380,8 +374,10 @@ fn observer_system_runner<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
     // - system is the same type erased system from above
     unsafe {
         (*system).update_archetype_component_access(world);
-        (*system).run_unsafe(trigger, world);
-        (*system).queue_deferred(world.into_deferred());
+        if (*system).validate_param_unsafe(world) {
+            (*system).run_unsafe(trigger, world);
+            (*system).queue_deferred(world.into_deferred());
+        }
     }
 }
 
@@ -399,7 +395,7 @@ fn hook_on_add<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
     _: ComponentId,
 ) {
     world.commands().queue(move |world: &mut World| {
-        let event_type = world.init_component::<E>();
+        let event_type = world.register_component::<E>();
         let mut components = Vec::new();
         B::component_ids(&mut world.components, &mut world.storages, &mut |id| {
             components.push(id);

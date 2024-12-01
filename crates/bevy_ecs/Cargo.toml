@@ -1,6 +1,6 @@
 [package]
 name = "bevy_ecs"
-version = "0.15.0-dev"
+version = "0.15.0"
 edition = "2021"
 description = "Bevy Engine's entity component system"
 homepage = "https://bevyengine.org"
@@ -18,23 +18,31 @@ bevy_debug_stepping = []
 serialize = ["dep:serde"]
 track_change_detection = []
 reflect_functions = ["bevy_reflect", "bevy_reflect/functions"]
+detailed_trace = []
 
 [dependencies]
-bevy_ptr = { path = "../bevy_ptr", version = "0.15.0-dev" }
-bevy_reflect = { path = "../bevy_reflect", version = "0.15.0-dev", optional = true }
-bevy_tasks = { path = "../bevy_tasks", version = "0.15.0-dev" }
-bevy_utils = { path = "../bevy_utils", version = "0.15.0-dev" }
-bevy_ecs_macros = { path = "macros", version = "0.15.0-dev" }
+bevy_ptr = { path = "../bevy_ptr", version = "0.15.0" }
+bevy_reflect = { path = "../bevy_reflect", version = "0.15.0", optional = true }
+bevy_tasks = { path = "../bevy_tasks", version = "0.15.0" }
+bevy_utils = { path = "../bevy_utils", version = "0.15.0" }
+bevy_ecs_macros = { path = "macros", version = "0.15.0" }
 
 petgraph = "0.6"
 bitflags = "2.3"
-concurrent-queue = "2.4.0"
+concurrent-queue = "2.5.0"
+disqualified = "1.0"
 fixedbitset = "0.5"
 serde = { version = "1", optional = true, default-features = false }
-thiserror = "1.0"
+derive_more = { version = "1", default-features = false, features = [
+  "error",
+  "from",
+  "display",
+  "into",
+  "as_ref",
+] }
 nonmax = "0.5"
 arrayvec = { version = "0.7.4", optional = true }
-smallvec = "1"
+smallvec = { version = "1", features = ["union"] }
 
 [dev-dependencies]
 rand = "0.8"

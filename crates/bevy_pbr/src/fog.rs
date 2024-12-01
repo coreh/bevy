@@ -29,10 +29,7 @@ use bevy_render::{extract_component::ExtractComponent, prelude::Camera};
 /// # fn system(mut commands: Commands) {
 /// commands.spawn((
 ///     // Setup your camera as usual
-///     Camera3dBundle {
-///         // ... camera options
-/// #       ..Default::default()
-///     },
+///     Camera3d::default(),
 ///     // Add fog to the same entity
 ///     DistanceFog {
 ///         color: Color::WHITE,
@@ -409,7 +406,7 @@ impl FogFalloff {
         extinction_color: Color,
         inscattering_color: Color,
     ) -> FogFalloff {
-        use std::f32::consts::E;
+        use core::f32::consts::E;
 
         let [r_e, g_e, b_e, a_e] = LinearRgba::from(extinction_color).to_f32_array();
         let [r_i, g_i, b_i, a_i] = LinearRgba::from(inscattering_color).to_f32_array();

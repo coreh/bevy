@@ -45,7 +45,7 @@ fn update_parent(world: &mut World, child: Entity, new_parent: Entity) -> Option
 ///
 /// Removes the [`Children`] component from the parent if it's empty.
 fn remove_from_children(world: &mut World, parent: Entity, child: Entity) {
-    let Some(mut parent) = world.get_entity_mut(parent) else {
+    let Ok(mut parent) = world.get_entity_mut(parent) else {
         return;
     };
     let Some(mut children) = parent.get_mut::<Children>() else {
@@ -309,7 +309,10 @@ pub trait ChildBuild {
 }
 
 impl ChildBuild for ChildBuilder<'_> {
-    type SpawnOutput<'a> = EntityCommands<'a> where Self: 'a;
+    type SpawnOutput<'a>
+        = EntityCommands<'a>
+    where
+        Self: 'a;
 
     fn spawn(&mut self, bundle: impl Bundle) -> EntityCommands {
         let e = self.commands.spawn(bundle);
@@ -535,7 +538,10 @@ pub struct WorldChildBuilder<'w> {
 }
 
 impl ChildBuild for WorldChildBuilder<'_> {
-    type SpawnOutput<'a> = EntityWorldMut<'a> where Self: 'a;
+    type SpawnOutput<'a>
+        = EntityWorldMut<'a>
+    where
+        Self: 'a;
 
     fn spawn(&mut self, bundle: impl Bundle) -> EntityWorldMut {
         let entity = self.world.spawn((bundle, Parent(self.parent))).id();
@@ -750,7 +756,7 @@ mod tests {
         let world = &mut World::new();
         world.insert_resource(Events::<HierarchyEvent>::default());
 
-        let [a, b, c, d] = std::array::from_fn(|_| world.spawn_empty().id());
+        let [a, b, c, d] = core::array::from_fn(|_| world.spawn_empty().id());
 
         world.entity_mut(a).add_child(b);
 
@@ -785,7 +791,7 @@ mod tests {
         let world = &mut World::new();
         world.insert_resource(Events::<HierarchyEvent>::default());
 
-        let [a, b, c] = std::array::from_fn(|_| world.spawn_empty().id());
+        let [a, b, c] = core::array::from_fn(|_| world.spawn_empty().id());
 
         world.entity_mut(a).set_parent(b);
 
@@ -819,7 +825,7 @@ mod tests {
     fn set_parent_of_orphan() {
         let world = &mut World::new();
 
-        let [a, b, c] = std::array::from_fn(|_| world.spawn_empty().id());
+        let [a, b, c] = core::array::from_fn(|_| world.spawn_empty().id());
         world.entity_mut(a).set_parent(b);
         assert_parent(world, a, Some(b));
         assert_children(world, b, Some(&[a]));
@@ -836,7 +842,7 @@ mod tests {
         let world = &mut World::new();
         world.insert_resource(Events::<HierarchyEvent>::default());
 
-        let [a, b, c] = std::array::from_fn(|_| world.spawn_empty().id());
+        let [a, b, c] = core::array::from_fn(|_| world.spawn_empty().id());
 
         world.entity_mut(a).add_children(&[b, c]);
         world.entity_mut(b).remove_parent();

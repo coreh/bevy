@@ -1,9 +1,9 @@
 use bevy_asset::{Assets, Handle};
+use bevy_image::{Image, ImageSampler};
 use bevy_math::{IVec2, UVec2};
 use bevy_render::{
     render_asset::RenderAssetUsages,
     render_resource::{Extent3d, TextureDimension, TextureFormat},
-    texture::{Image, ImageSampler},
 };
 use bevy_sprite::{DynamicTextureAtlasBuilder, TextureAtlasLayout};
 use bevy_utils::HashMap;
@@ -116,8 +116,8 @@ impl FontAtlas {
     }
 }
 
-impl std::fmt::Debug for FontAtlas {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for FontAtlas {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("FontAtlas")
             .field("glyph_to_atlas_index", &self.glyph_to_atlas_index)
             .field("texture_atlas", &self.texture_atlas)

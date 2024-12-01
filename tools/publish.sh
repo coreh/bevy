@@ -6,6 +6,7 @@ crates=(
     bevy_macro_utils
     bevy_derive
     bevy_math
+    bevy_color
     bevy_tasks
     bevy_reflect/derive
     bevy_reflect
@@ -27,6 +28,8 @@ crates=(
     bevy_encase_derive
     bevy_render/macros
     bevy_mikktspace
+    bevy_image
+    bevy_mesh
     bevy_render
     bevy_core_pipeline
     bevy_input
@@ -34,7 +37,9 @@ crates=(
     bevy_animation
     bevy_pbr
     bevy_gltf
+    bevy_remote
     bevy_scene
+    bevy_picking
     bevy_sprite
     bevy_gizmos/macros
     bevy_gizmos
@@ -45,8 +50,6 @@ crates=(
     bevy_dev_tools
     bevy_internal
     bevy_dylib
-    bevy_color
-    bevy_picking
 )
 
 if [ -n "$(git status --porcelain)" ]; then

@@ -1,8 +1,6 @@
-use crate::extract_resource::ExtractResource;
-use crate::render_resource::TextureView;
-use crate::texture::BevyDefault;
-use bevy_ecs::system::Resource;
-use bevy_ecs::{prelude::Component, reflect::ReflectComponent};
+use crate::{extract_resource::ExtractResource, render_resource::TextureView};
+use bevy_ecs::{prelude::Component, reflect::ReflectComponent, system::Resource};
+use bevy_image::BevyDefault as _;
 use bevy_math::UVec2;
 use bevy_reflect::prelude::*;
 use bevy_utils::HashMap;
@@ -35,7 +33,7 @@ impl ManualTextureView {
 #[derive(Default, Clone, Resource, ExtractResource)]
 pub struct ManualTextureViews(HashMap<ManualTextureViewHandle, ManualTextureView>);
 
-impl std::ops::Deref for ManualTextureViews {
+impl core::ops::Deref for ManualTextureViews {
     type Target = HashMap<ManualTextureViewHandle, ManualTextureView>;
 
     fn deref(&self) -> &Self::Target {
@@ -43,7 +41,7 @@ impl std::ops::Deref for ManualTextureViews {
     }
 }
 
-impl std::ops::DerefMut for ManualTextureViews {
+impl core::ops::DerefMut for ManualTextureViews {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }

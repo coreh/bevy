@@ -18,7 +18,7 @@ use bevy_render::{
     view::ExtractedView,
 };
 use bevy_utils::{HashMap, HashSet};
-use std::hash::Hash;
+use core::hash::Hash;
 
 /// A list of `(Material ID, Pipeline, BindGroup)` for a view for use in [`super::MeshletMainOpaquePass3dNode`].
 #[derive(Component, Deref, DerefMut, Default)]
@@ -200,6 +200,7 @@ pub fn prepare_material_meshlet_meshes_main_opaque_pass<M: Material>(
                     entry_point: material_fragment.entry_point,
                     targets: material_fragment.targets,
                 }),
+                zero_initialize_workgroup_memory: false,
             };
 
             let material_id = instance_manager.get_material_id(material_id.untyped());
@@ -353,6 +354,7 @@ pub fn prepare_material_meshlet_meshes_prepass<M: Material>(
                     entry_point,
                     targets: material_fragment.targets,
                 }),
+                zero_initialize_workgroup_memory: false,
             };
 
             let material_id = instance_manager.get_material_id(material_id.untyped());

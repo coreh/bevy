@@ -133,6 +133,7 @@
 //! [Why ambient cubes?]: #why-ambient-cubes
 
 use bevy_ecs::{component::Component, reflect::ReflectComponent};
+use bevy_image::Image;
 use bevy_render::{
     render_asset::RenderAssets,
     render_resource::{
@@ -140,13 +141,12 @@ use bevy_render::{
         TextureSampleType, TextureView,
     },
     renderer::RenderDevice,
-    texture::{FallbackImage, GpuImage, Image},
+    texture::{FallbackImage, GpuImage},
 };
-use std::{num::NonZero, ops::Deref};
+use core::{num::NonZero, ops::Deref};
 
 use bevy_asset::{AssetId, Handle};
-use bevy_reflect::std_traits::ReflectDefault;
-use bevy_reflect::Reflect;
+use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 
 use crate::{
     add_cubemap_texture_view, binding_arrays_are_usable, RenderViewLightProbes,

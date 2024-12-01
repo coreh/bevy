@@ -22,6 +22,7 @@ struct ClusterableObject {
 
 const POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT: u32   = 1u;
 const POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIVE: u32 = 2u;
+const POINT_LIGHT_FLAGS_VOLUMETRIC_BIT: u32        = 4u;
 const POINT_LIGHT_FLAGS_RENDER_LAYERS_SHIFT_BITS: u32 = 16u;
 
 struct DirectionalCascade {
@@ -113,7 +114,7 @@ struct ClusterOffsetsAndCounts {
 };
 #else
 struct ClusterableObjects {
-    data: array<ClusterableObject, 256u>,
+    data: array<ClusterableObject, 204u>,
 };
 struct ClusterLightIndexLists {
     // each u32 contains 4 u8 indices into the ClusterableObjects array
@@ -166,4 +167,10 @@ struct ScreenSpaceReflectionsSettings {
 struct EnvironmentMapUniform {
     // Transformation matrix for the environment cubemaps in world space.
     transform: mat4x4<f32>,
+};
+
+// Shader version of the order independent transparency settings component.
+struct OrderIndependentTransparencySettings {
+  layers_count: i32,
+  alpha_threshold: f32,
 };

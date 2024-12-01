@@ -1,4 +1,4 @@
-use std::f32::consts::TAU;
+use core::f32::consts::TAU;
 
 use glam::FloatExt;
 
@@ -120,7 +120,6 @@ impl Rot2 {
     ///
     /// let rot3 = Rot2::radians(PI);
     /// assert_relative_eq!(rot1 * rot1, rot3);
-    ///
     /// ```
     #[inline]
     pub fn radians(radians: f32) -> Self {
@@ -146,7 +145,6 @@ impl Rot2 {
     ///
     /// let rot3 = Rot2::degrees(180.0);
     /// assert_relative_eq!(rot1 * rot1, rot3);
-    ///
     /// ```
     #[inline]
     pub fn degrees(degrees: f32) -> Self {
@@ -171,7 +169,6 @@ impl Rot2 {
     ///
     /// let rot3 = Rot2::turn_fraction(0.5);
     /// assert_relative_eq!(rot1 * rot1, rot3);
-    ///
     /// ```
     #[inline]
     pub fn turn_fraction(fraction: f32) -> Self {
@@ -334,7 +331,17 @@ impl Rot2 {
 
     /// Returns the angle in radians needed to make `self` and `other` coincide.
     #[inline]
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use `angle_to` instead, the semantics of `angle_between` will change in the future."
+    )]
     pub fn angle_between(self, other: Self) -> f32 {
+        self.angle_to(other)
+    }
+
+    /// Returns the angle in radians needed to make `self` and `other` coincide.
+    #[inline]
+    pub fn angle_to(self, other: Self) -> f32 {
         (other * self.inverse()).as_radians()
     }
 
@@ -427,7 +434,7 @@ impl Rot2 {
     /// ```
     #[inline]
     pub fn slerp(self, end: Self, s: f32) -> Self {
-        self * Self::radians(self.angle_between(end) * s)
+        self * Self::radians(self.angle_to(end) * s)
     }
 }
 
@@ -445,7 +452,7 @@ impl From<Rot2> for Mat2 {
     }
 }
 
-impl std::ops::Mul for Rot2 {
+impl core::ops::Mul for Rot2 {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -456,13 +463,13 @@ impl std::ops::Mul for Rot2 {
     }
 }
 
-impl std::ops::MulAssign for Rot2 {
+impl core::ops::MulAssign for Rot2 {
     fn mul_assign(&mut self, rhs: Self) {
         *self = *self * rhs;
     }
 }
 
-impl std::ops::Mul<Vec2> for Rot2 {
+impl core::ops::Mul<Vec2> for Rot2 {
     type Output = Vec2;
 
     /// Rotates a [`Vec2`] by a [`Rot2`].
@@ -509,7 +516,7 @@ impl approx::UlpsEq for Rot2 {
 
 #[cfg(test)]
 mod tests {
-    use std::f32::consts::FRAC_PI_2;
+    use core::f32::consts::FRAC_PI_2;
 
     use approx::assert_relative_eq;
 
@@ -570,10 +577,7 @@ mod tests {
         assert_relative_eq!((rotation1 * rotation2.inverse()).as_degrees(), 45.0);
 
         // This should be equivalent to the above
-        assert_relative_eq!(
-            rotation2.angle_between(rotation1),
-            std::f32::consts::FRAC_PI_4
-        );
+        assert_relative_eq!(rotation2.angle_to(rotation1), core::f32::consts::FRAC_PI_4);
     }
 
     #[test]

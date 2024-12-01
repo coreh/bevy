@@ -78,6 +78,7 @@ pub struct First;
 pub struct PreUpdate;
 
 /// Runs the [`FixedMain`] schedule in a loop according until all relevant elapsed time has been "consumed".
+///
 /// If you need to order your variable timestep systems
 /// before or after the fixed update logic, use the [`RunFixedMainLoopSystem`] system set.
 ///
@@ -179,6 +180,10 @@ pub struct PostUpdate;
 /// See the [`Main`] schedule for some details about how schedules are run.
 #[derive(ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Last;
+
+/// Animation system set. This exists in [`PostUpdate`].
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub struct Animation;
 
 /// Defines the schedules to be run for the [`Main`] schedule, including
 /// their order.
