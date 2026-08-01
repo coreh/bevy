@@ -3379,6 +3379,17 @@ category = "Shaders"
 wasm = true
 
 [[example]]
+name = "lens_flare"
+path = "examples/shader_advanced/lens_flare.rs"
+doc-scrape-examples = true
+
+[package.metadata.example.lens_flare]
+name = "Lens Flare"
+description = "Compares screen-space and light-driven lens flare techniques"
+category = "Shaders"
+wasm = true
+
+[[example]]
 name = "custom_shader_instancing"
 path = "examples/shader_advanced/custom_shader_instancing.rs"
 doc-scrape-examples = true
